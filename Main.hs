@@ -1,53 +1,16 @@
+module Main where
 import Prelude hiding (lookup)
 import Control.Monad ( unless )
 import Data.Map ( Map, insert, lookup, empty )
+import Definitions
 
-data Expr = 
-      Set String Expr
-    | Get String
-    | Lit Value
-    | BinOp BinOp Expr Expr
-    | UnOp UnOp Expr
-    | IfElse Expr Expr Expr
-    | Seq Expr Expr
-    | While Expr Expr
-    | DoWhile Expr Expr
-    | Skip
-    | Lambda Expr Expr
-    | Print Expr
-    deriving (Show)
-
-data BinOp = 
-      Add | Mul | Sub | Div | Mod 
-    | Eq | Neq | Lt | Lte | Gt | Gte 
-    | And | Or  
-    deriving (Show)
-
-data UnOp = 
-      Neg
-    | Not
-    deriving (Show)
-
-data Value = 
-      VInt Int
-    | VString String
-    | VBool Bool
-    | VNone
-    deriving (Eq, Show)
-
-data Type = 
-      TInt
-    | TString
-    | TBool 
-    | TBlock
-    deriving (Eq, Show)
-
-type Variables = Map String (Type, Value)
-
+main :: IO ()
+main = do
+    evaluateProgram testProgram
+    return ()
 
 testProgram :: Expr
 testProgram = Seq (Set "x" (Lit (VInt 7))) (Seq (Set "y" (Lit (VInt 6))) (Set "z" (BinOp Add (Get "x") (Get "y"))))
-
 
 evaluateProgram :: Expr -> IO (Value, Variables)
 evaluateProgram = evaluate empty 
@@ -71,29 +34,24 @@ evaluate vars (Get name) = case lookup name vars of
     Nothing -> error ("No variable called " ++ name)
     Just (_, val) -> return (val, vars)
 
-evaluate vars (BinOp operator expr1 expr2) = do
-    let checkedType = typecheck vars (BinOp operator expr1 expr2)
-    case checkedType of 
-        Left str -> error str
-        Right _ -> do
+evaluate vars (BinOp op expr1 expr2) = checkThenEval vars (BinOp op expr1 expr2) evaluate'
+    where  
+        evaluate' = do
             (value1, vars') <- evaluate vars expr1
             (value2, vars'') <- evaluate vars' expr2
-            return (evalBinOps operator value1 value2, vars'')
+            return (evalBinOps op value1 value2, vars'')
 
-evaluate vars (UnOp operator expr) = do
-    let checkedType = typecheck vars (UnOp operator expr)
-    case checkedType of 
-        Left str -> error str
-        Right _ -> do
+evaluate vars (UnOp op expr) = checkThenEval vars (UnOp op expr) evaluate'
+    where
+        evaluate' = do
             (value, vars') <- evaluate vars expr
-            return (evalUnOps operator value, vars')
+            return (evalUnOps op value, vars')
 
-evaluate vars (IfElse predicate trueExpr falseExpr) = do
-    let checkedType = typecheck vars (IfElse predicate trueExpr falseExpr)
-    case checkedType of 
-        Left str -> error str
-        Right _ -> do
-            (predicateValue, vars') <- evaluate vars predicate
+evaluate vars (IfElse pred trueExpr falseExpr) = 
+    checkThenEval vars (IfElse pred trueExpr falseExpr) evaluate'
+    where
+        evaluate' = do
+            (predicateValue, vars') <- evaluate vars pred
             case predicateValue of 
                 VBool True -> evaluate vars' trueExpr
                 VBool False -> evaluate vars' falseExpr
@@ -102,28 +60,35 @@ evaluate vars (Seq expr1 expr2) = do
     (_, vars') <- evaluate vars expr1
     evaluate vars' expr2
 
-evaluate vars (While predicate expr) = do
-    let checkedType = typecheck vars (While predicate expr)
-    case checkedType of 
-        Left str -> error str
-        Right _ -> do 
-            (predicateValue, vars') <- evaluate vars predicate
+evaluate vars (While pred expr) = checkThenEval vars (While pred expr) evaluate'
+    where 
+        evaluate' = do
+            (predicateValue, vars') <- evaluate vars pred
             case predicateValue of 
                 VBool False -> return (VNone, vars')
                 _ -> do
                     (_, vars'') <- evaluate vars' expr
-                    evaluate vars'' (While predicate expr)
-
-evaluate vars (DoWhile predicate expr) = do
-    let checkedType = typecheck vars (DoWhile predicate expr)
-    case checkedType of
-        Left str -> error str
-        Right _ -> do 
+                    evaluate vars'' (While pred expr)
+    
+evaluate vars (DoWhile pred expr) = checkThenEval vars (DoWhile pred expr) evaluate'
+    where
+        evaluate' = do
             (_, vars') <- evaluate vars expr
-            (predicateValue, vars'') <- evaluate vars' predicate
+            (predicateValue, vars'') <- evaluate vars' pred
             case predicateValue of 
                 VBool False -> return (VNone, vars'')
-                _ -> evaluate vars'' (DoWhile predicate expr)
+                _ -> evaluate vars'' (DoWhile pred expr)
+
+evaluate vars Skip = return (VNone, vars)
+
+
+--Helper for typechecking
+checkThenEval :: Variables -> Expr -> IO (Value, Variables) -> IO (Value, Variables)
+checkThenEval vars testExpr evalFun = do
+    let checkedType = typecheck vars testExpr
+    case checkedType of
+        Left str -> error str
+        Right _ -> evalFun 
 
 
 --Helper functions for evaluation
@@ -135,17 +100,18 @@ evalBinOps :: BinOp -> Value -> Value -> Value
 evalBinOps Add (VInt x) (VInt y) = VInt (x + y)
 
 
-
 typecheck :: Variables -> Expr -> Either String Type
 typecheck _ (Lit (VInt    _)) = Right TInt
 typecheck _ (Lit (VBool   _)) = Right TBool
 typecheck _ (Lit (VString _)) = Right TString
+
 typecheck vars (Set name expr) = do
     exprType <- typecheck vars expr
     case lookup name vars of 
         Just (existingType, _) | existingType /= exprType -> 
             Left ("Type error for " ++ name)
         _ -> Right exprType
+
 typecheck vars (Get name) = do
     case lookup name vars of
         Nothing -> Left ("Variable " ++ name ++ " not found")
