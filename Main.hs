@@ -6,8 +6,8 @@ import Definitions
 
 main :: IO ()
 main = do
-    evaluateProgram testProgram
-    return ()
+  evaluateProgram testProgram
+  return ()
 
 testProgram :: Expr
 --testProgram = Seq (Set "x" (Lit (VInt 7))) (Seq (Set "y" (Lit (VString "6"))) (Set "z" (BinOp Add (Get "x") (Get "y"))))
@@ -16,7 +16,40 @@ testProgram :: Expr
 --testProgram = Seq (Set "msg" (Lit (VString "Hello"))) (Seq (Set "count" (Lit (VInt 3))) (While (BinOp Gt (Get "count") (Lit (VInt 0))) (Seq (Print (Get "msg")) (Set "count" (BinOp Sub (Get "count") (Lit (VInt 1)))))))
 --testProgram = Seq (Set "x" (Lit (VInt 10))) (While (BinOp Gt (Get "x") (Lit (VInt 0))) (Seq (Set "x" (BinOp Sub (Get "x") (Lit (VInt 1)))) (Print (Get "x"))))
 --testProgram = Print (Get "undefinedVar")
-testProgram = Seq (Set "msg" (Lit (VString "Hello"))) (Seq (Set "count" (Lit (VInt 10))) (DoWhile (BinOp Gt (Get "count") (Lit (VInt 0))) (Seq (Print (Get "msg")) (Set "count" (BinOp Sub (Get "count") (Lit (VInt 1)))) )))
+--testProgram = Seq (Set "msg" (Lit (VString "Hello"))) (Seq (Set "count" (Lit (VInt 10))) (DoWhile (BinOp Gt (Get "count") (Lit (VInt 0))) (Seq (Print (Get "msg")) (Set "count" (BinOp Sub (Get "count") (Lit (VInt 1)))) )))
+testProgram = 
+  Seq 
+    [ Set "msg" (Lit (VString "Hello"))
+    , Set "count" (Lit (VInt 10))
+    , DoWhile 
+        (BinOp Gt (Get "count") (Lit (VInt 0))) 
+        (Seq 
+            [ Print (Get "msg")
+            , Set "count" (BinOp Sub (Get "count") (Lit (VInt 1)))
+            ]
+        )
+    ]
+
+{-
+tokenizer :: String -> [Token]
+tokenizer = lexer [] . words
+ where 
+    lexer :: [Token] -> [String] -> [Token]
+    lexer acc [] = acc ++ [TokEOF]
+    lexer acc (x:xs) 
+      | x == ";"                                                                              = lexer (acc ++ [TokSemicolon]) xs
+      | x == "("                                                                              = lexer (acc ++ [TokLeftBracket]) xs
+      | x == ")"                                                                              = lexer (acc ++ [TokRightBracket]) xs
+      | x == "{"                                                                              = lexer (acc ++ [TokLeftBrace]) xs
+      | x == "}"                                                                              = lexer (acc ++ [TokRightBrace]) xs
+      | all (`elem` "0123456789") x                                                           = lexer (acc ++ [TokInt (read x)]) xs
+      | x `elem` ["True", "False"]                                                            = lexer (acc ++ [TokBool (x == "True")]) xs
+      | x `elem` ["if", "else", "while", "do", "print", "skip"]                               = lexer (acc ++ [TokKeyword x]) xs
+      | x `elem` ["+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "!"] = lexer (acc ++ [TokSymbol x]) xs
+      | head x == '"' && last x == '"'                                                        = lexer (acc ++ [TokString ((init . tail) x)]) xs
+      | otherwise                                                                             = lexer (acc ++ [TokIdentifier x]) xs
+
+-}
 
 evaluateProgram :: Expr -> IO (Value, Variables)
 evaluateProgram = evaluate empty 
@@ -87,12 +120,13 @@ evaluate vars (IfElse pred trueExpr falseExpr) =
                 VBool True -> evaluate vars' trueExpr
                 VBool False -> evaluate vars' falseExpr
 
-evaluate vars (Seq expr1 expr2) = checkThenEval vars expr1 evaluate'
+evaluate vars (Seq [])         = return (VNone, vars)
+evaluate vars (Seq (expr:exprs)) = checkThenEval vars expr evaluate'
     where 
         evaluate' = do
-            (value, vars') <- evaluate vars expr1
+            (value, vars') <- evaluate vars expr
             case value of 
-                VNone -> evaluate vars' expr2
+                VNone -> evaluate vars' (Seq exprs)
                 _     -> do
                     putStrLn "Unexpected value in sequence"
                     return (VError, vars')
@@ -243,55 +277,27 @@ typecheck vars (BinOp op expr1 expr2) = do
         (_,  Left err1, Left err2) -> Left $ err1 ++ " and " ++ err2
         (_, Left err, _) -> Left err
         (_, _, Left err) -> Left err
-        _                 -> Left (show op ++ " cannot be applied to types " ++ show exprType1 ++ " and " ++ show exprType2)
+        _                 -> Left ("Type error: " ++ show op ++ " cannot be applied to types " ++ show exprType1 ++ " and " ++ show exprType2)
     
 typecheck vars (UnOp op expr) = do
     let exprType = typecheck vars expr
     case (op, exprType) of
         (Neg, Right TInt) -> Right TInt
         (Not, Right TBool) -> Right TBool
-        _                 -> Left ("Incorrect type for function " ++ show op)
+        _                 -> Left ("Type error: incorrect type for " ++ show op)
 
-typecheck vars (IfElse pred expr1 expr2) = do
-    {-
-    let predType = typecheck vars pred
-    unless (predType == Right TBool) (Left "Incorrect type for if-else condition")
-    let exprType1 = typecheck vars expr1
-    let exprType2 = typecheck vars expr2
-    if exprType1 == exprType2 
-    then exprType1
-    else Left "Block types for if-else statement do not match"
-    -}
+typecheck vars (IfElse pred expr1 expr2) = 
     checkThrough vars TNone [(pred, TBool, "if-else statement"), (expr1, TBool, "if block"), (expr2, TBool, "else block")]
 
-typecheck vars (Seq expr1 expr2) = do
-    --let exprType1 = typecheck vars expr1
-    --unless (exprType1 == Right TNone) $ Left "Incorrect type for sequence block"
-    checkThrough vars TNone [(expr1, TNone, "sequence block")]
-    typecheck vars expr2
-    
+typecheck vars (Seq []) = Right TNone
+typecheck vars (Seq (expr:exprs)) = do
+    checkThrough vars TNone [(expr, TNone, "sequence block")]
+    typecheck vars (Seq exprs)
 
-typecheck vars (While pred expr) = do
-    {-
-    case typecheck vars pred of
-        Left str -> Left str
-        Right TBool -> case typecheck vars expr of
-            Left str -> Left str
-            Right TNone -> Right TNone
-            Right x -> Left $ "Type error: incorrect type " ++ show x ++ " within while loop"
-        Right x -> Left $ "Type error: incorrect type " ++ show x ++ " within while condition"
-    -}
+typecheck vars (While pred expr) = 
     checkThrough vars TNone [(pred, TBool, "while condition"), (expr, TNone, "while loop")]
 
-
-typecheck vars (DoWhile pred expr) = do
-    {-
-    let predType = typecheck vars pred
-    unless (predType == Right TBool) (Left "Incorrect type for do-while condition")
-    let exprType = typecheck vars expr
-    unless (exprType == Right TNone) (Left "Incorrect type within do-while loop")
-    Right TNone
-    -}
+typecheck vars (DoWhile pred expr) = 
     checkThrough vars TNone [(pred, TBool, "do-while condition"), (expr, TNone, "do-while loop")]
 
 typecheck vars (Print expr) = do
@@ -299,6 +305,8 @@ typecheck vars (Print expr) = do
         Left error -> Left error
         Right _  -> Right TNone
 
+typecheck vars x = do
+  Left $ "Syntax error: unsupported " ++ show x ++ " operation" 
 
 --Helper functions for typechecking
 checkThrough :: Variables -> Type -> [(Expr, Type, String)] -> Either String Type

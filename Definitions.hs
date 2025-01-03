@@ -1,4 +1,4 @@
-module Definitions (Expr(..), BinOp(..), UnOp(..), Value(..), Type(..), Variables) where
+module Definitions (Expr(..), BinOp(..), UnOp(..), Value(..), Type(..), Variables, Token(..)) where
 import Data.Map (Map)
 
 --Here, we define the AST
@@ -9,7 +9,7 @@ data Expr = Set String Expr
             | BinOp BinOp Expr Expr
             | UnOp UnOp Expr
             | IfElse Expr Expr Expr
-            | Seq Expr Expr
+            | Seq [Expr]
             | While Expr Expr
             | DoWhile Expr Expr
             | Skip
@@ -47,3 +47,19 @@ data Type =
 
 --Defining variables as a dictionary of 'names' to 'type-values'
 type Variables = Map String (Type, Value)
+
+--Defining tokens
+data Token = 
+    TokInt Int
+    | TokString String
+    | TokBool Bool
+    | TokEOF
+    | TokKeyword String
+    | TokIdentifier String
+    | TokSymbol String
+    | TokLeftBracket
+    | TokRightBracket
+    | TokLeftBrace
+    | TokRightBrace
+    | TokSemicolon
+    deriving (Show, Eq)
