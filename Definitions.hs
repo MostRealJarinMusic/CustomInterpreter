@@ -5,6 +5,7 @@ import Data.Map (Map)
 --Loosely based on Haskell's Core
 data Expr 
   = Set String Expr 
+  | Declare Type String Expr
   | Get String
   | Lit Value
   | BinOp BinOp Expr Expr
@@ -37,6 +38,7 @@ data Value
   = VInt Int
   | VString String
   | VBool Bool
+  | VAny --Generic types - allowing polymorphism
   | VNone
   | VError
   deriving (Eq, Show)
@@ -46,6 +48,7 @@ data Type
   = TInt
   | TString
   | TBool 
+  | TGeneric
   | TNone
   deriving (Eq, Show)
 
