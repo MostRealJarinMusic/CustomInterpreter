@@ -132,6 +132,9 @@ typecheck vars (Print expr) = do
     Left error -> (vars', Left error)
     Right _    -> (vars', Right TNone)
 
+typecheck vars Skip = (vars, Right TNone)
+
 typecheck vars x = (vars, Left $ "Syntax error: unsupported " ++ show x ++ " operation")
+
 
 

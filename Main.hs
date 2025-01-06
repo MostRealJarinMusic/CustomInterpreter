@@ -2,7 +2,7 @@ module Main where
 import Data.Map ( empty )
 import Definitions
 import Typechecker
-import Evaluator
+import Evaluator (evaluate)
 
 
 main :: IO ()
@@ -19,6 +19,7 @@ testProgram :: Expr
 --testProgram = Seq (Set "x" (Lit (VInt 10))) (While (BinOp Gt (Get "x") (Lit (VInt 0))) (Seq (Set "x" (BinOp Sub (Get "x") (Lit (VInt 1)))) (Print (Get "x"))))
 --testProgram = Print (Get "undefinedVar")
 --testProgram = Seq (Set "msg" (Lit (VString "Hello"))) (Seq (Set "count" (Lit (VInt 10))) (DoWhile (BinOp Gt (Get "count") (Lit (VInt 0))) (Seq (Print (Get "msg")) (Set "count" (BinOp Sub (Get "count") (Lit (VInt 1)))) )))
+{-
 testProgram = 
   Seq 
     [ Declare TString "msg" (Lit (VString "Hello"))
@@ -31,6 +32,25 @@ testProgram =
             ]
         )
     ]
+
+testProgram = Seq
+        [ Declare TInt "x" (Lit (VInt 10))                      -- Declare global x
+        , Function "add" [(TInt, "y")] TNone                   -- Define function add
+            (Seq [ Set "x" (BinOp Add (Get "x") (Get "y"))
+                 , Return (Lit VNone)
+                 ])
+        , Call "add" [Lit (VInt 5)]                            -- Call add(5)
+        , Print (Get "x")                                      -- Print global x
+        ]
+-}
+testProgram = Seq
+        [ Function "factorial" [(TInt, "n")] TInt
+            (IfElse (BinOp Eq (Get "n") (Lit (VInt 0)))
+              (Lit (VInt 1))
+              (BinOp Mul (Get "n") (Call "factorial" [BinOp Sub (Get "n") (Lit (VInt 1))])))
+        , Print (Call "factorial" [Lit (VInt 10)])
+        ]
+
 
 {-
 tokenizer :: String -> [Token]
@@ -54,16 +74,16 @@ tokenizer = lexer [] . words
 -}
 
 
-run :: Expr -> IO (Value, Variables)
+run :: Expr -> IO (Value, Environment)
 run expr = 
   let finalType = typecheckProgram expr
   in case finalType of
-    Left err -> putStrLn err >> return (VError, empty)
+    Left err -> putStrLn err >> return (VError, (empty, empty))
     _ -> evaluateProgram expr
 
 --Interpreter sections
-evaluateProgram :: Expr -> IO (Value, Variables)
-evaluateProgram = evaluate empty 
+evaluateProgram :: Expr -> IO (Value, Environment)
+evaluateProgram = evaluate (empty, empty)
 
 typecheckProgram :: Expr -> Either String Type
 typecheckProgram program = 

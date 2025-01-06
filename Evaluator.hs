@@ -1,112 +1,144 @@
 module Evaluator (evaluate) where
 import Prelude hiding (lookup)
-import Data.Map ( Map, insert, lookup, empty )
+import Data.Map ( Map, insert, lookup, empty, union, fromList, delete )
 import Definitions
 import Typechecker
 
 
-evaluate :: Variables -> Expr -> IO (Value, Variables)
-evaluate vars (Lit value) = return (value, vars)
+evaluate :: Environment -> Expr -> IO (Value, Environment)
+evaluate env (Lit value) = return (value, env)
 
-evaluate vars (Declare varType name expr) = do
+evaluate env (Declare varType name expr) = do
+  let (vars, funcs) = env
   case lookup name vars of
     Just _ -> do
       putStrLn $ "Compile error: variable '" ++ name ++ "' is already assigned"
-      return (VError, vars)
+      return (VError, env)
     Nothing -> do
-      (val, _) <- evaluate vars expr
+      (val, _) <- evaluate env expr
       if val == VError
-      then return (VError, vars)
-      else return (VNone, insert name (varType, val) vars)
+      then return (VError, env)
+      else return (VNone, (insert name (varType, val) vars, funcs))
 
-evaluate vars (Set name expr) = 
-  case lookup name vars of
+evaluate env (Set name expr) = 
+  let (vars, funcs) = env
+  in case lookup name vars of
     Just (existingType, _) -> do
-      (val, _) <- evaluate vars expr
+      (val, _) <- evaluate env expr
       if val == VError
-      then return (VError, vars)    
-      else return (VNone, insert name (existingType, val) vars)
+      then return (VError, env)    
+      else return (VNone, (insert name (existingType, val) vars, funcs))
     _ -> do
       putStrLn $ "Compile error: variable '" ++ name ++ "' not declared"
-      return (VError, vars)
+      return (VError, env)
 
-evaluate vars (Get name) = case lookup name vars of
+evaluate env (Get name) = 
+  let (vars, funcs) = env
+  in case lookup name vars of
     Nothing -> do
         putStrLn $ "Compile error: variable " ++ name ++ " not defined within the current scope"
-        return (VError, vars)
-    Just (_, val) -> return (val, vars)
+        return (VError, env)
+    Just (_, val) -> return (val, env)
 
-evaluate vars (BinOp op expr1 expr2) = do
-  (value1, vars') <- evaluate vars expr1
-  (value2, vars'') <- evaluate vars' expr2
+evaluate env (BinOp op expr1 expr2) = do
+  (value1, env') <- evaluate env expr1
+  (value2, env'') <- evaluate env' expr2
   if value1 == VError || value2 == VError
-  then return (VError, vars'')
+  then return (VError, env'')
   else do
     let result = evalBinOps op value1 value2
     case result of
       Left str -> do
           putStrLn str
-          return (VError, vars'')
-      Right validResult -> return (validResult, vars'')
+          return (VError, env'')
+      Right validResult -> return (validResult, env'')
 
-evaluate vars (UnOp op expr) = do
-  (value, vars') <- evaluate vars expr
+evaluate env (UnOp op expr) = do
+  (value, env') <- evaluate env expr
   if value == VError 
-  then return (VError, vars')
+  then return (VError, env')
   else do
     let result = evalUnOps op value
     case result of
       Left str -> do
         putStrLn str
-        return (VError, vars')
-      Right validResult -> return (validResult, vars')
+        return (VError, env')
+      Right validResult -> return (validResult, env')
 
-evaluate vars (IfElse pred trueExpr falseExpr) = do
-  (predicateValue, vars') <- evaluate vars pred
+evaluate env (IfElse pred trueExpr falseExpr) = do
+  (predicateValue, env') <- evaluate env pred
   if predicateValue == VError 
-  then return (VError, vars')
+  then return (VError, env')
   else case predicateValue of 
-    VBool True -> evaluate vars' trueExpr
-    VBool False -> evaluate vars' falseExpr
+    VBool True -> evaluate env' trueExpr
+    VBool False -> evaluate env' falseExpr
 
-evaluate vars (Seq [])         = return (VNone, vars)
-evaluate vars (Seq (expr:exprs)) = do
-  (value, vars') <- evaluate vars expr
+evaluate env (Seq [])         = return (VNone, env)
+evaluate env (Seq (expr:exprs)) = do
+  (value, env') <- evaluate env expr
   case value of 
-    VNone -> evaluate vars' (Seq exprs)
+    VNone -> evaluate env' (Seq exprs)
     _     -> do
       putStrLn "Compiler error: unexpected value in sequence"
-      return (VError, vars')
+      return (VError, env')
 
-evaluate vars (While pred expr) = do
-  (predicateValue, vars') <- evaluate vars pred
+evaluate env (While pred expr) = do
+  (predicateValue, env') <- evaluate env pred
   case predicateValue of 
-    VError      -> return (VError, vars')
-    VBool False -> return (VNone, vars')
+    VError      -> return (VError, env')
+    VBool False -> return (VNone, env')
     _           -> do
-      (_, vars'') <- evaluate vars' expr
-      evaluate vars'' (While pred expr)
+      (_, env'') <- evaluate env' expr
+      evaluate env'' (While pred expr)
     
-evaluate vars (DoWhile pred expr) = do
-  (value, vars') <- evaluate vars expr
+evaluate env (DoWhile pred expr) = do
+  (value, env') <- evaluate env expr
   if value /= VNone
-  then return (VError, vars')
+  then return (VError, env')
   else do     
-    (predicateValue, vars'') <- evaluate vars' pred
+    (predicateValue, env'') <- evaluate env' pred
     case predicateValue of 
-      VError      -> return (VError, vars')
-      VBool False -> return (VNone, vars'')
-      _ -> evaluate vars'' (DoWhile pred expr)
+      VError      -> return (VError, env')
+      VBool False -> return (VNone, env'')
+      _ -> evaluate env'' (DoWhile pred expr)
 
-evaluate vars Skip = return (VNone, vars)
+evaluate env Skip = return (VNone, env)
 
-evaluate vars (Print expr) = do
-  (value, vars') <- evaluate vars expr
+evaluate env (Print expr) = do
+  (value, env') <- evaluate env expr
   case value of
-    VError -> return (VError, vars)
+    VError -> return (VError, env)
     _      -> do
       putStrLn (prettyPrint value)
-      return (VNone, vars)
+      return (VNone, env)
+
+evaluate env (Return expr) = evaluate env expr
+evaluate env (Function name params returnType expr) = 
+  let func = (params, returnType, expr)
+      (vars, funcs) = env
+  in return (VNone, (vars, insert name func funcs))
+
+evaluate env@(vars, funcs) (Call name args) = 
+  case lookup name funcs of
+    Nothing -> do
+      putStrLn $ "Compile error: function '" ++ name ++ "' is not defined"
+      return (VError, env)
+    Just (params, retType, body) -> 
+      if length params /= length args
+      then do
+        putStrLn $ "Compile error: incorrect number of arguments supplied to function '" ++ name ++ "'"
+        return (VError, env)
+      else do
+        (definedArgs, env') <- evalArgs env args
+        let boundParams = fromList [(n, (t, v)) | ((t, n), v) <- zip params definedArgs]
+        let localEnv = (boundParams `union` vars, funcs)
+        (result, newEnv) <- evaluate localEnv body
+        let (updatedVars, _) = newEnv
+        let cleanedVars = foldr (delete . snd) updatedVars params
+        let newGlobalEnv = (cleanedVars, funcs)
+        if retType == TNone
+        then return (VNone, newGlobalEnv)
+        else return (result, newGlobalEnv)
 
 
 
@@ -123,7 +155,6 @@ evalUnOps Neg (VInt x) = Right $ VInt (negate x)
 evalUnOps Neg _        = Left "Type error: incorrect type for negation"
 evalUnOps Not (VBool bool) = Right $ VBool (not bool)
 evalUnOps Not _            = Left "Type error: Incorrect type for logical NOT"
-
 
 evalBinOps :: BinOp -> Value -> Value -> Either String Value
 evalBinOps Add (VInt x) (VInt y) = Right $ VInt (x + y) 
@@ -154,3 +185,11 @@ evalBinOps Neq (VString x) (VString y)  = Right $ VBool $ x /= y
 evalBinOps And (VBool x) (VBool y)  = Right $ VBool $ x && y
 evalBinOps Or  (VBool x) (VBool y)  = Right $ VBool $ x || y
 evalBinOps op  _        _        = Left $ "Type error: attempt to apply " ++ show op ++ " with incorrect types"
+
+
+evalArgs :: Environment -> [Expr] -> IO ([Value], Environment)
+evalArgs env []     = return ([], env)
+evalArgs env (expr:exprs) = do
+  (val, env') <- evaluate env expr
+  (vals, env'') <- evalArgs env' exprs
+  return (val : vals, env'')
