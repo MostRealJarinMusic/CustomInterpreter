@@ -113,6 +113,7 @@ evaluate env (Print expr) = do
       return (VNone, env)
 
 evaluate env (Return expr) = evaluate env expr
+
 evaluate env (Function name params returnType expr) = 
   let func = (params, returnType, expr)
       (vars, funcs) = env

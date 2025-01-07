@@ -1,140 +1,217 @@
-module Typechecker (typecheck, TypeMap) where
+module Typechecker (typecheck) where
 import Prelude hiding (lookup)
-import Data.Map ( Map, insert, lookup, empty )
+import Data.Map ( Map, insert, lookup, empty, fromList, union )
 import Definitions
 
-type TypeMap = Map String Type
+
+type FunctionTypes = Map String ([Type], Type)
+type VariableTypes = Map String Type
+type EnvironmentTypes = (VariableTypes, FunctionTypes)
 
 --Typechecking
-typecheck :: TypeMap -> Expr -> (TypeMap, Either String Type)
+typecheck :: EnvironmentTypes -> Expr -> (EnvironmentTypes, Either String Type)
 --Literals
-typecheck vars (Lit (VInt    _)) = (vars, Right TInt)
-typecheck vars (Lit (VBool   _)) = (vars, Right TBool)
-typecheck vars (Lit (VString _)) = (vars, Right TString)
+typecheck env (Lit (VInt    _)) = (env, Right TInt)
+typecheck env (Lit (VBool   _)) = (env, Right TBool)
+typecheck env (Lit (VString _)) = (env, Right TString)
 --Declarations
-typecheck vars (Declare varType name expr) =
-  let (vars', exprType) = typecheck vars expr
+typecheck env@(vars, funcs) (Declare varType name expr) =
+  let (env', exprType) = typecheck env expr
   in case exprType of
-    Left err -> (vars', Left err)
+    Left err -> (env', Left err)
     Right exprType' -> do
       if exprType' == varType
-      then (insert name varType vars', Right TNone)
-      else (vars', Left $ "Type error in declaration: variable '" ++ name ++ "' declared as " ++ show varType ++ " but expression evaluates to " ++ show exprType')
+      then ((insert name varType vars, funcs), Right TNone)
+      else (env', Left $ "Type error in declaration: variable '" ++ name ++ "' declared as " ++ show varType ++ " but expression evaluates to " ++ show exprType')
 --Assignment
-typecheck vars (Set name expr) = do
-  let (vars', exprType) = typecheck vars expr
+typecheck env@(vars, funcs) (Set name expr) = do
+  let (env', exprType) = typecheck env expr
   case exprType of
-    Left err -> (vars', Left err)
+    Left err -> (env', Left err)
     Right exprType' -> 
       case lookup name vars of 
         Just existingType | existingType /= exprType' -> 
-          (vars', Left $ "Type error in assignment: variable '" ++ name ++ "' has type " ++ show existingType ++ " but the expression evaluates to " ++ show exprType )
-        Nothing -> (vars', Left $ "Compile error in assignment: variable '" ++ name ++ "' not found" )
-        _ -> (vars', Right TNone)
+          (env', Left $ "Type error in assignment: variable '" ++ name ++ "' has type " ++ show existingType ++ " but the expression evaluates to " ++ show exprType )
+        Nothing -> (env', Left $ "Compile error in assignment: variable '" ++ name ++ "' not found" )
+        _ -> (env', Right TNone)
 --Access
-typecheck vars (Get name) = do
+typecheck env@(vars, funcs) (Get name) = do
   case lookup name vars of
-    Nothing -> (vars, Left $ "Compile error in access: variable '" ++ name ++ "' not found" )
-    Just existingType -> (vars, Right existingType)
+    Nothing -> (env, Left $ "Compile error in access: variable '" ++ name ++ "' not found" )
+    Just existingType -> (env, Right existingType)
 --Binary operators
-typecheck vars (BinOp op expr1 expr2) = do
-  let (vars', exprType1) = typecheck vars expr1
-  let (vars'', exprType2) = typecheck vars' expr2
+typecheck env (BinOp op expr1 expr2) = do
+  let (env', exprType1) = typecheck env expr1
+  let (env'', exprType2) = typecheck env' expr2
   case (op, exprType1, exprType2) of
-    (Add, Right TInt,    Right TInt)    -> (vars'', Right TInt)
-    (Add, Right TString, Right TString) -> (vars'', Right TString)
-    (Mul, Right TInt,    Right TInt)    -> (vars'', Right TInt)
-    (Sub, Right TInt,    Right TInt)    -> (vars'', Right TInt)
-    (Div, Right TInt,    Right TInt)    -> (vars'', Right TInt)
-    (Mod, Right TInt,    Right TInt)    -> (vars'', Right TInt)
-    (Eq,  Right TInt,    Right TInt)    -> (vars'', Right TBool)
-    (Neq, Right TInt,    Right TInt)    -> (vars'', Right TBool)
-    (Lt,  Right TInt,    Right TInt)    -> (vars'', Right TBool)
-    (Lte, Right TInt,    Right TInt)    -> (vars'', Right TBool)
-    (Gt,  Right TInt,    Right TInt)    -> (vars'', Right TBool)
-    (Gte, Right TInt,    Right TInt)    -> (vars'', Right TBool)
-    (Eq,  Right TBool,   Right TBool)   -> (vars'', Right TBool)
-    (Neq, Right TBool,   Right TBool)   -> (vars'', Right TBool)
-    (Lt,  Right TBool,   Right TBool)   -> (vars'', Right TBool)
-    (Lte, Right TBool,   Right TBool)   -> (vars'', Right TBool)
-    (Gt,  Right TBool,   Right TBool)   -> (vars'', Right TBool)
-    (Gte, Right TBool,   Right TBool)   -> (vars'', Right TBool)
-    (Eq,  Right TString, Right TString) -> (vars'', Right TBool)
-    (Neq, Right TString, Right TString) -> (vars'', Right TBool)
-    (And, Right TBool,   Right TBool)   -> (vars'', Right TBool)
-    (Or,  Right TBool,   Right TBool)   -> (vars'', Right TBool)
-    (_,   Left err1,     Left err2)     -> (vars'', Left $ err1 ++ " and " ++ err2)
-    (_,   Left err,      _)             -> (vars'', Left err)
-    (_,   _,             Left err)      -> (vars'', Left err)
-    _                                   -> (vars'', Left $ "Type error in binary operator: " ++ show op ++ " cannot be applied to types " ++ show exprType1 ++ " and " ++ show exprType2)
+    (Add, Right TInt,    Right TInt)    -> (env'', Right TInt)
+    (Add, Right TString, Right TString) -> (env'', Right TString)
+    (Mul, Right TInt,    Right TInt)    -> (env'', Right TInt)
+    (Sub, Right TInt,    Right TInt)    -> (env'', Right TInt)
+    (Div, Right TInt,    Right TInt)    -> (env'', Right TInt)
+    (Mod, Right TInt,    Right TInt)    -> (env'', Right TInt)
+    (Eq,  Right TInt,    Right TInt)    -> (env'', Right TBool)
+    (Neq, Right TInt,    Right TInt)    -> (env'', Right TBool)
+    (Lt,  Right TInt,    Right TInt)    -> (env'', Right TBool)
+    (Lte, Right TInt,    Right TInt)    -> (env'', Right TBool)
+    (Gt,  Right TInt,    Right TInt)    -> (env'', Right TBool)
+    (Gte, Right TInt,    Right TInt)    -> (env'', Right TBool)
+    (Eq,  Right TBool,   Right TBool)   -> (env'', Right TBool)
+    (Neq, Right TBool,   Right TBool)   -> (env'', Right TBool)
+    (Lt,  Right TBool,   Right TBool)   -> (env'', Right TBool)
+    (Lte, Right TBool,   Right TBool)   -> (env'', Right TBool)
+    (Gt,  Right TBool,   Right TBool)   -> (env'', Right TBool)
+    (Gte, Right TBool,   Right TBool)   -> (env'', Right TBool)
+    (Eq,  Right TString, Right TString) -> (env'', Right TBool)
+    (Neq, Right TString, Right TString) -> (env'', Right TBool)
+    (And, Right TBool,   Right TBool)   -> (env'', Right TBool)
+    (Or,  Right TBool,   Right TBool)   -> (env'', Right TBool)
+    (_,   Left err1,     Left err2)     -> (env'', Left $ err1 ++ " and " ++ err2)
+    (_,   Left err,      _)             -> (env'', Left err)
+    (_,   _,             Left err)      -> (env'', Left err)
+    _                                   -> (env'', Left $ "Type error in binary operator: " ++ show op ++ " cannot be applied to types " ++ show exprType1 ++ " and " ++ show exprType2)
 --Unary operators
-typecheck vars (UnOp op expr) = do
-  let (vars', exprType) = typecheck vars expr
+typecheck env (UnOp op expr) = do
+  let (env', exprType) = typecheck env expr
   case (op, exprType) of
-    (Neg, Right TInt)  -> (vars', Right TInt)
-    (Not, Right TBool) -> (vars', Right TBool)
-    _                  -> (vars', Left $ "Type error in unary operator: incorrect type for " ++ show op)
-
-typecheck vars (IfElse pred expr1 expr2) =
-  --checkThrough vars TNone [(pred, TBool, "if-else statement"), (expr1, TNone, "if block"), (expr2, TNone, "else block")]
-  let (vars', predType) = typecheck vars pred
-      (vars'', expr1Type) = typecheck vars' expr1
-      (vars''', expr2Type) = typecheck vars'' expr2
+    (Neg, Right TInt)  -> (env', Right TInt)
+    (Not, Right TBool) -> (env', Right TBool)
+    _                  -> (env', Left $ "Type error in unary operator: incorrect type for " ++ show op)
+--If-else statements
+typecheck env (IfElse pred expr1 expr2) =
+  let (env', predType) = typecheck env pred
+      (env'', expr1Type) = typecheck env' expr1
+      (env''', expr2Type) = typecheck env'' expr2
   in case predType of
-    Left err -> (vars''', Left err)
+    Left err -> (env''', Left err)
     Right TBool -> 
       case (expr1Type, expr2Type) of
-        (Right TNone, Right TNone) -> (vars''', Right TNone)
-        (Right _, Right _)         -> (vars''', Left "Type error in if-else statement: incorrect type within if-else blocks")
-        (Left err, _)              -> (vars''', Left err)
-        (_, Left err)              -> (vars''', Left err)
-    Right _ -> (vars''', Left "Type error in if-else statement: condition in if-else statement must be a boolean")
-
-
-typecheck vars (Seq []) = (vars, Right TNone)
-typecheck vars (Seq (expr:exprs)) =
-  --checkThrough vars TNone [(expr, TNone, "sequence block")]
-  let (vars', exprType) = typecheck vars expr
+        (Right x, Right y) | x == y -> (env''', Right x)
+        (Right _, Right _)         -> (env''', Left "Type error in if-else statement: incorrect type within if-else blocks")
+        (Left err, _)              -> (env''', Left err)
+        (_, Left err)              -> (env''', Left err)
+    Right _ -> (env''', Left "Type error in if-else statement: condition in if-else statement must be a boolean")
+--Sequence
+typecheck env (Seq []) = (env, Right TNone)
+typecheck env (Seq (expr:exprs)) =
+  let (env', exprType) = typecheck env expr
   in case exprType of
-    Left err -> (vars', Left err)
-    Right TNone -> typecheck vars' (Seq exprs)
-    Right _ -> (vars', Left "Type error in sequence: incorrect type within sequence")
-
-typecheck vars (While pred expr) = 
-  --checkThrough vars TNone [(pred, TBool, "while condition"), (expr, TNone, "while loop")]
-  let (vars', predType) = typecheck vars pred
-      (vars'', exprType) = typecheck vars' expr
+    Left err -> (env', Left err)
+    Right TNone -> typecheck env' (Seq exprs)
+    Right _ -> (env', Left "Type error in sequence: incorrect type within sequence")
+--While loops
+typecheck env (While pred expr) = 
+  let (env', predType) = typecheck env pred
+      (env'', exprType) = typecheck env' expr
   in case predType of
-    Left err -> (vars'', Left err)
+    Left err -> (env'', Left err)
     Right TBool -> 
       case exprType of
-        Left err -> (vars'', Left err)
-        Right TNone -> (vars'', Right TNone)
-        Right _     -> (vars'', Left "Type error in while loop: incorrect type within while loop")
-    Right _ -> (vars'', Left "Type error in while loop: condition in while loop must be a boolean")
-
-
-typecheck vars (DoWhile pred expr) = 
-  let (vars', predType) = typecheck vars pred
-      (vars'', exprType) = typecheck vars' expr
+        Left err -> (env'', Left err)
+        Right TNone -> (env'', Right TNone)
+        Right _     -> (env'', Left "Type error in while loop: incorrect type within while loop")
+    Right _ -> (env'', Left "Type error in while loop: condition in while loop must be a boolean")
+--Do-while loops
+typecheck env (DoWhile pred expr) = 
+  let (env', predType) = typecheck env pred
+      (env'', exprType) = typecheck env' expr
   in case predType of
-    Left err -> (vars'', Left err)
+    Left err -> (env'', Left err)
     Right TBool -> 
       case exprType of
-        Left err -> (vars'', Left err)
-        Right TNone -> (vars'', Right TNone)
-        Right _     -> (vars'', Left "Type error in while loop: incorrect type within do-while loop")
-    Right _ -> (vars'', Left "Type error in while loop: condition in do-while loop must be a boolean")
-
-typecheck vars (Print expr) = do
-  let (vars', exprType) = typecheck vars expr
+        Left err -> (env'', Left err)
+        Right TNone -> (env'', Right TNone)
+        Right _     -> (env'', Left "Type error in while loop: incorrect type within do-while loop")
+    Right _ -> (env'', Left "Type error in while loop: condition in do-while loop must be a boolean")
+--Printing to 'console'
+typecheck env (Print expr) = do
+  let (env', exprType) = typecheck env expr
   case exprType of 
-    Left error -> (vars', Left error)
-    Right _    -> (vars', Right TNone)
+    Left error -> (env', Left error)
+    Right _    -> (env', Right TNone)
 
-typecheck vars Skip = (vars, Right TNone)
+typecheck env Skip = (env, Right TNone)
+
+typecheck env@(vars, funcs) (Function name params retType body) = 
+  let 
+    funcType = (map fst params, retType)
+    updatedFuncs = insert name funcType funcs
+
+    paramTypes = fromList [(n, t) | (t, n) <- params]
+    localEnv = (vars `union` paramTypes, updatedFuncs)
+  in case expectReturn localEnv retType body of
+    Left err -> (env, Left $ "Type error: " ++ err)
+    Right _ -> ((vars, updatedFuncs), Right TNone)
+  {-  
+     case typecheck localEnv body of
+    (_, Left err) -> (env, Left err)
+    (_, Right bodyType) -> 
+      if bodyType == retType 
+      then
+        let newFuncs = insert name (map fst params, retType) funcs
+        in ((vars, newFuncs), Right TNone)
+      else 
+        (env, Left $ "Type error: function '" ++ name ++ "' declared return type " ++ show retType ++ " but returns " ++ show bodyType)
+  -}
+
+typecheck env@(vars, funcs) (Call name args) = 
+  case lookup name funcs of
+    Nothing -> (env, Left $ "function '" ++ name ++ "' is not defined")
+    Just (paramTypes, retType) ->
+      let checkedArgs = map (typecheck env) args
+          argTypes = map snd checkedArgs
+      in if all isRight argTypes && map fromRight argTypes == paramTypes
+        then (env, Right retType)
+        else (env, Left $ "Type error: incorrect argument types for function '" ++ name ++ "': expected: " ++ show paramTypes ++ " but got " ++ show (map fromRight argTypes))
+
+  where
+    isRight (Right _) = True
+    isRight _         = False
+
+    fromRight (Right x) = x 
+    fromRight _         = error "Unexpected Left from fromRight"
+
+
+typecheck env (Return expr) = 
+  let (env', exprType) = typecheck env expr
+  in case exprType of
+    Left error -> (env', Left error)
+    Right _ -> (env', exprType)
 
 typecheck vars x = (vars, Left $ "Syntax error: unsupported " ++ show x ++ " operation")
 
 
+expectReturn :: EnvironmentTypes -> Type -> Expr -> Either String ()
+expectReturn env retType body = 
+  case hasReturn env retType body of
+    Nothing -> Right ()
+    Just err -> Left err
+  
+hasReturn :: EnvironmentTypes -> Type -> Expr -> Maybe String
+hasReturn env retType expr = case expr of
+  Return retExpr -> 
+    case typecheck env retExpr of
+      (_, Right retExprType) | retExprType == retType -> Nothing
+      (_, Right retExprType)                          -> Just $ "return type mismatch: expected " ++ show retType ++ " but got " ++ show retExprType
+      (_, Left err)                                   -> Just err
+  Seq []    -> Just "function body has no return statement"
+  --Seq exprs -> any (hasReturn env retType) exprs
+  Seq (expr:exprs) -> 
+    case hasReturn env retType expr of
+      Nothing | isReturn expr && not (null exprs) -> Just "unreachable code after return statement"
+      Nothing | isReturn expr -> Nothing
+      Nothing -> hasReturn env retType (Seq exprs)
+      Just err -> Just err
+  IfElse _ trueBranch falseBranch ->
+    case (hasReturn env retType trueBranch, hasReturn env retType falseBranch) of
+      (Nothing, Nothing) -> Nothing
+      (Just err, _) -> Just err
+      (_, Just err) -> Just err
+  While _ whileBlock -> hasReturn env retType whileBlock
+  DoWhile _ doWhileBlock -> hasReturn env retType doWhileBlock
+  _ -> Just "function does not contain a valid return statement"
 
+
+isReturn :: Expr -> Bool
+isReturn (Return _) = True
+isReturn _          = False

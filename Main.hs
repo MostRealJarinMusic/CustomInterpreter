@@ -42,15 +42,29 @@ testProgram = Seq
         , Call "add" [Lit (VInt 5)]                            -- Call add(5)
         , Print (Get "x")                                      -- Print global x
         ]
--}
+
 testProgram = Seq
         [ Function "factorial" [(TInt, "n")] TInt
             (IfElse (BinOp Eq (Get "n") (Lit (VInt 0)))
-              (Lit (VInt 1))
-              (BinOp Mul (Get "n") (Call "factorial" [BinOp Sub (Get "n") (Lit (VInt 1))])))
+              (Return (Lit (VInt 1)))
+              (Return (BinOp Mul (Get "n") (Call "factorial" [BinOp Sub (Get "n") (Lit (VInt 1))]))))
         , Print (Call "factorial" [Lit (VInt 10)])
+        , Function "sum" [(TInt, "a"), (TInt, "b")] TInt
+          (Seq [
+            Return (BinOp Add (Get "a") (Get "b"))
+          , Print (Lit (VString "Unreachable"))
+          ])
         ]
-
+-}
+testProgram = Seq
+        [ Declare TInt "x" (Lit (VInt 10))                      -- Declare global x
+        , Function "add" [(TInt, "y")] TNone                   -- Define function add
+            (Seq [ Set "x" (BinOp Add (Get "x") (Get "y"))
+                 , Return (Lit VNone)
+                 ])
+        , Call "add" [Lit (VInt 5)]                            -- Call add(5)
+        , Print (Get "x")                                      -- Print global x
+        ]
 
 {-
 tokenizer :: String -> [Token]
@@ -74,20 +88,24 @@ tokenizer = lexer [] . words
 -}
 
 
-run :: Expr -> IO (Value, Environment)
+run :: Expr -> IO ()
 run expr = 
   let finalType = typecheckProgram expr
   in case finalType of
-    Left err -> putStrLn err >> return (VError, (empty, empty))
-    _ -> evaluateProgram expr
+    Left err -> do 
+      putStrLn err
+      return ()
+    _ -> do
+      evaluateProgram expr
+      return ()
 
 --Interpreter sections
 evaluateProgram :: Expr -> IO (Value, Environment)
-evaluateProgram = evaluate (empty, empty)
+evaluateProgram program = evaluate (empty, empty) program
 
 typecheckProgram :: Expr -> Either String Type
 typecheckProgram program = 
-  let (_, finalType) = typecheck empty program
+  let (_, finalType) = typecheck (empty, empty) program
   in case finalType of
     Left err -> Left err
     Right TNone -> Right TNone
