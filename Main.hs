@@ -55,16 +55,38 @@ testProgram = Seq
           , Print (Lit (VString "Unreachable"))
           ])
         ]
+
+testProgram = 
+  Seq
+  [ 
+    Declare TInt "x" (Lit (VInt 10))                     
+  , Procedure "add" [(TInt, "y"), (TInt, "z")]                 
+      (Seq [
+        Set "x" (BinOp Add (Get "x") (Get "y"))
+      , Print (Get "x")
+      , Set "x" (BinOp Add (Get "x") (Get "z"))
+      , Print (Get "x")
+      ])
+  , Call "add" [Lit (VInt 5), Lit (VInt 7)]                            
+  , Print (Get "x")                                   
+  ]
 -}
-testProgram = Seq
-        [ Declare TInt "x" (Lit (VInt 10))                      -- Declare global x
-        , Function "add" [(TInt, "y")] TNone                   -- Define function add
-            (Seq [ Set "x" (BinOp Add (Get "x") (Get "y"))
-                 , Return (Lit VNone)
-                 ])
-        , Call "add" [Lit (VInt 5)]                            -- Call add(5)
-        , Print (Get "x")                                      -- Print global x
-        ]
+
+testProgram = 
+  Seq
+    [ Declare TInt "i" (Lit (VInt 0)),
+      Declare TInt "j" (Lit (VInt 0)),
+      While (BinOp Lt (Get "i") (Lit (VInt 3)))
+        (Seq
+          [ Set "j" (Lit (VInt 0)),
+            While (BinOp Lt (Get "j") (Lit (VInt 2)))
+              (Seq
+                [ Print (BinOp Add (Get "i") (Get "j")),
+                  Set "j" (BinOp Add (Get "j") (Lit (VInt 1)))
+                ]),
+            Set "i" (BinOp Add (Get "i") (Lit (VInt 1)))
+          ])
+    ]
 
 {-
 tokenizer :: String -> [Token]
@@ -101,7 +123,7 @@ run expr =
 
 --Interpreter sections
 evaluateProgram :: Expr -> IO (Value, Environment)
-evaluateProgram program = evaluate (empty, empty) program
+evaluateProgram = evaluate ([empty], empty)
 
 typecheckProgram :: Expr -> Either String Type
 typecheckProgram program = 

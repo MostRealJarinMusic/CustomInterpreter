@@ -1,8 +1,8 @@
 module Evaluator (evaluate) where
 import Prelude hiding (lookup)
-import Data.Map ( Map, insert, lookup, empty, union, fromList, delete )
+import Data.Map ( Map, insert, lookup, empty, union, fromList, toList, delete )
 import Definitions
-import Typechecker
+import Utility 
 
 
 evaluate :: Environment -> Expr -> IO (Value, Environment)
@@ -10,7 +10,7 @@ evaluate env (Lit value) = return (value, env)
 
 evaluate env (Declare varType name expr) = do
   let (vars, funcs) = env
-  case lookup name vars of
+  case lookupVariable name vars of
     Just _ -> do
       putStrLn $ "Compile error: variable '" ++ name ++ "' is already assigned"
       return (VError, env)
@@ -18,23 +18,24 @@ evaluate env (Declare varType name expr) = do
       (val, _) <- evaluate env expr
       if val == VError
       then return (VError, env)
-      else return (VNone, (insert name (varType, val) vars, funcs))
+      else return (VNone, (insertVariable name (varType, val) vars, funcs))
 
 evaluate env (Set name expr) = 
   let (vars, funcs) = env
-  in case lookup name vars of
+  in case lookupVariable name vars of
     Just (existingType, _) -> do
-      (val, _) <- evaluate env expr
+      (val, env') <- evaluate env expr
+      let (vars', funcs') = env'
       if val == VError
-      then return (VError, env)    
-      else return (VNone, (insert name (existingType, val) vars, funcs))
+      then return (VError, env')    
+      else return (VNone, (updateVariable name (existingType, val) vars', funcs'))
     _ -> do
       putStrLn $ "Compile error: variable '" ++ name ++ "' not declared"
       return (VError, env)
 
 evaluate env (Get name) = 
   let (vars, funcs) = env
-  in case lookup name vars of
+  in case lookupVariable name vars of
     Nothing -> do
         putStrLn $ "Compile error: variable " ++ name ++ " not defined within the current scope"
         return (VError, env)
@@ -79,7 +80,7 @@ evaluate env (Seq (expr:exprs)) = do
   case value of 
     VNone -> evaluate env' (Seq exprs)
     _     -> do
-      putStrLn "Compiler error: unexpected value in sequence"
+      --putStrLn "Compiler error: unexpected value in sequence"
       return (VError, env')
 
 evaluate env (While pred expr) = do
@@ -107,10 +108,10 @@ evaluate env Skip = return (VNone, env)
 evaluate env (Print expr) = do
   (value, env') <- evaluate env expr
   case value of
-    VError -> return (VError, env)
+    VError -> return (VError, env')
     _      -> do
       putStrLn (prettyPrint value)
-      return (VNone, env)
+      return (VNone, env')
 
 evaluate env (Return expr) = evaluate env expr
 
@@ -119,7 +120,11 @@ evaluate env (Function name params returnType expr) =
       (vars, funcs) = env
   in return (VNone, (vars, insert name func funcs))
 
-evaluate env@(vars, funcs) (Call name args) = 
+evaluate (vars, funcs) (Procedure name params expr) = 
+  let func = (params, TNone, expr)
+  in return (VNone, (vars, insert name func funcs))
+
+evaluate env@(_, funcs) (Call name args) = 
   case lookup name funcs of
     Nothing -> do
       putStrLn $ "Compile error: function '" ++ name ++ "' is not defined"
@@ -131,16 +136,27 @@ evaluate env@(vars, funcs) (Call name args) =
         return (VError, env)
       else do
         (definedArgs, env') <- evalArgs env args
-        let boundParams = fromList [(n, (t, v)) | ((t, n), v) <- zip params definedArgs]
-        let localEnv = (boundParams `union` vars, funcs)
-        (result, newEnv) <- evaluate localEnv body
-        let (updatedVars, _) = newEnv
-        let cleanedVars = foldr (delete . snd) updatedVars params
-        let newGlobalEnv = (cleanedVars, funcs)
-        if retType == TNone
-        then return (VNone, newGlobalEnv)
-        else return (result, newGlobalEnv)
+        let (varScopes, funcs') = env'
 
+        let boundParams = fromList [(n, (t, v)) | ((t, n), v) <- zip params definedArgs]
+        let newVarScopes = enterScope varScopes
+        let funcScope = insertVariables (toList boundParams) newVarScopes
+
+        let funcEnv = (funcScope, funcs')
+        (result, updatedEnv) <- evaluate funcEnv body
+
+        let (updatedScopes, _) = updatedEnv
+        let finalScopes = exitScope updatedScopes
+        let newEnv = (finalScopes, funcs')
+        
+        case retType of
+          TNone -> return (VNone, newEnv)
+          _     -> return (result, newEnv)
+
+
+--Helper for inserting variables into a new scope
+insertVariables :: [(String, (Type, Value))] -> ScopedVariables -> ScopedVariables
+insertVariables vars scopes = foldr (\(name, typeVal) sc -> insertVariable name typeVal sc) scopes vars
 
 
 --Helper for printing

@@ -1,4 +1,4 @@
-module Definitions (Expr(..), BinOp(..), UnOp(..), Value(..), Type(..), Variables, Functions, Environment, Token(..)) where
+module Definitions (Expr(..), BinOp(..), UnOp(..), Value(..), Type(..), Variables, ScopedVariables, Functions, Environment, Token(..)) where
 import Data.Map (Map)
 
 --Here, we define the AST
@@ -17,6 +17,7 @@ data Expr
   | Skip -- Skip
   | Print Expr --Printing
   | Function String [(Type, String)] Type Expr --Function declaration
+  | Procedure String [(Type, String)] Expr --Procedure declaration
   | Return Expr --Returning a value from a function
   | Call String [Expr] --Calling a function
   deriving (Show)
@@ -55,12 +56,14 @@ data Type
 
 --Defining variables as a dictionary of 'names' to 'type-values'
 type Variables = Map String (Type, Value)
+type ScopedVariables = [Variables]
 
 --Defining functions as a dictionary of 'names' to 'parameters-type-expressions'
 type Functions = Map String ([(Type, String)], Type, Expr)
 
 --Defining the environment
-type Environment = (Variables, Functions)
+type Environment = (ScopedVariables, Functions)
+
 
 --Defining patterns to allow for pattern-matching
 data Pattern
@@ -69,9 +72,6 @@ data Pattern
   | PBool Bool
   | PWildcard
   deriving (Eq, Show)
-
-
-
 
 --Defining tokens for the tokenizer and parse to work with
 data Token 

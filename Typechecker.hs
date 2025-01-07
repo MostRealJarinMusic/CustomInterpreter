@@ -140,7 +140,7 @@ typecheck env@(vars, funcs) (Function name params retType body) =
     paramTypes = fromList [(n, t) | (t, n) <- params]
     localEnv = (vars `union` paramTypes, updatedFuncs)
   in case expectReturn localEnv retType body of
-    Left err -> (env, Left $ "Type error: " ++ err)
+    Left err -> (env, Left $ "Type error in function: " ++ err)
     Right _ -> ((vars, updatedFuncs), Right TNone)
   {-  
      case typecheck localEnv body of
@@ -153,6 +153,17 @@ typecheck env@(vars, funcs) (Function name params retType body) =
       else 
         (env, Left $ "Type error: function '" ++ name ++ "' declared return type " ++ show retType ++ " but returns " ++ show bodyType)
   -}
+
+typecheck env@(vars, funcs) (Procedure name params body) = 
+  let 
+    procType = (map fst params, TNone) 
+    updatedFuncs = insert name procType funcs
+
+    paramTypes = fromList [(n, t) | (t, n) <- params]
+    localEnv = (vars `union` paramTypes, updatedFuncs)
+  in case typecheck localEnv body of 
+    (_, Left err) -> (env, Left err)
+    _ -> ((fst env, updatedFuncs), Right TNone)
 
 typecheck env@(vars, funcs) (Call name args) = 
   case lookup name funcs of
