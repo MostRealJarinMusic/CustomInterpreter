@@ -70,7 +70,6 @@ testProgram =
   , Call "add" [Lit (VInt 5), Lit (VInt 7)]                            
   , Print (Get "x")                                   
   ]
--}
 
 testProgram = 
   Seq
@@ -87,6 +86,40 @@ testProgram =
             Set "i" (BinOp Add (Get "i") (Lit (VInt 1)))
           ])
     ]
+
+testProgram = 
+  Seq
+    [ Function "factorial" [(TInt, "n")] TInt
+      (Seq 
+        [ IfElse (BinOp Eq (Get "n") (Lit (VInt 0)))
+          (Seq 
+            [Return (Lit (VInt 1))]
+          )
+          (Seq 
+            [Return (BinOp Mul (Get "n") (Call "factorial" [BinOp Sub (Get "n") (Lit (VInt 1))]))]
+          )
+        ]
+      )
+    , Print (Call "factorial" [Lit (VInt 5)])
+    ]
+
+-}
+testProgram = 
+  Seq
+    [ Declare TInt "i" (Lit (VInt 0)),
+      Declare TInt "j" (Lit (VInt 0)),
+      While (BinOp Lt (Get "i") (Lit (VInt 3)))
+        (Seq
+          [ Set "j" (Lit (VInt 0)),
+            While (BinOp Lt (Get "j") (Lit (VInt 2)))
+              (Seq
+                [ Print (BinOp Add (Get "i") (Get "j")),
+                  Set "j" (BinOp Add (Get "j") (Lit (VInt 1)))
+                ]),
+            Set "i" (BinOp Add (Get "i") (Lit (VInt 1)))
+          ])
+    ]
+
 
 {-
 tokenizer :: String -> [Token]
@@ -123,7 +156,7 @@ run expr =
 
 --Interpreter sections
 evaluateProgram :: Expr -> IO (Value, Environment)
-evaluateProgram = evaluate ([empty], empty)
+evaluateProgram = evaluate ([], empty)
 
 typecheckProgram :: Expr -> Either String Type
 typecheckProgram program = 

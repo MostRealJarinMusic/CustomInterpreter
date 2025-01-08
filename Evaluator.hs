@@ -73,7 +73,7 @@ evaluate env (IfElse pred trueExpr falseExpr) = do
   else case predicateValue of 
     VBool True -> evaluate env' trueExpr
     VBool False -> evaluate env' falseExpr
-
+{-
 evaluate env (Seq [])         = return (VNone, env)
 evaluate env (Seq (expr:exprs)) = do
   (value, env') <- evaluate env expr
@@ -82,6 +82,30 @@ evaluate env (Seq (expr:exprs)) = do
     _     -> do
       --putStrLn "Compiler error: unexpected value in sequence"
       return (VError, env')
+-}
+
+evaluate env (Seq []) = return (VNone, env)
+evaluate env@(vars, funcs) (Seq exprs) = do
+  let scopedEnv = (enterScope vars, funcs)
+  --print scopedEnv
+  scopedResult <- evaluateSequence scopedEnv exprs
+  case scopedResult of
+    (value, scopedEnv') -> do
+      let finalEnv = (exitScope (fst scopedEnv'), snd scopedEnv') 
+      --print (fst finalEnv)
+      return (value, finalEnv)
+  where 
+    evaluateSequence env [] = return (VNone, env)
+    evaluateSequence env (expr:exprs) = do
+      (value, env') <- evaluate env expr
+      --print value
+      case value of
+        VError     -> do 
+          putStrLn $ "Compile error: error within sequence block"
+          return (VError, env')
+        VNone      -> evaluateSequence env' exprs 
+        _ -> return (value, env')
+
 
 evaluate env (While pred expr) = do
   (predicateValue, env') <- evaluate env pred
@@ -144,7 +168,6 @@ evaluate env@(_, funcs) (Call name args) =
 
         let funcEnv = (funcScope, funcs')
         (result, updatedEnv) <- evaluate funcEnv body
-
         let (updatedScopes, _) = updatedEnv
         let finalScopes = exitScope updatedScopes
         let newEnv = (finalScopes, funcs')
