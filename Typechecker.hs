@@ -24,9 +24,9 @@ typecheck env@(vars, funcs) (Declare varType name expr) =
       then ((insert name varType vars, funcs), Right TNone)
       else (env', Left $ "Type error in declaration: variable '" ++ name ++ "' declared as " ++ show varType ++ " but expression evaluates to " ++ show exprType')
 --Assignment
-typecheck env@(vars, funcs) (Set name expr) = do
+typecheck env@(vars, funcs) (Set name expr) =
   let (env', exprType) = typecheck env expr
-  case exprType of
+  in case exprType of
     Left err -> (env', Left err)
     Right exprType' -> 
       case lookup name vars of 
@@ -40,10 +40,11 @@ typecheck env@(vars, funcs) (Get name) = do
     Nothing -> (env, Left $ "Compile error in access: variable '" ++ name ++ "' not found" )
     Just existingType -> (env, Right existingType)
 --Binary operators
-typecheck env (BinOp op expr1 expr2) = do
-  let (env', exprType1) = typecheck env expr1
-  let (env'', exprType2) = typecheck env' expr2
-  case (op, exprType1, exprType2) of
+typecheck env (BinOp op expr1 expr2) =
+  let 
+    (env', exprType1) = typecheck env expr1
+    (env'', exprType2) = typecheck env' expr2
+  in case (op, exprType1, exprType2) of
     (Add, Right TInt,    Right TInt)    -> (env'', Right TInt)
     (Add, Right TString, Right TString) -> (env'', Right TString)
     (Mul, Right TInt,    Right TInt)    -> (env'', Right TInt)
@@ -71,9 +72,9 @@ typecheck env (BinOp op expr1 expr2) = do
     (_,   _,             Left err)      -> (env'', Left err)
     _                                   -> (env'', Left $ "Type error in binary operator: " ++ show op ++ " cannot be applied to types " ++ show exprType1 ++ " and " ++ show exprType2)
 --Unary operators
-typecheck env (UnOp op expr) = do
+typecheck env (UnOp op expr) =
   let (env', exprType) = typecheck env expr
-  case (op, exprType) of
+  in case (op, exprType) of
     (Neg, Right TInt)  -> (env', Right TInt)
     (Not, Right TBool) -> (env', Right TBool)
     _                  -> (env', Left $ "Type error in unary operator: incorrect type for " ++ show op)
@@ -124,9 +125,9 @@ typecheck env (DoWhile pred expr) =
         Right _     -> (env'', Left "Type error in while loop: incorrect type within do-while loop")
     Right _ -> (env'', Left "Type error in while loop: condition in do-while loop must be a boolean")
 --Printing to 'console'
-typecheck env (Print expr) = do
+typecheck env (Print expr) =
   let (env', exprType) = typecheck env expr
-  case exprType of 
+  in case exprType of 
     Left error -> (env', Left error)
     Right _    -> (env', Right TNone)
 
@@ -142,17 +143,6 @@ typecheck env@(vars, funcs) (Function name params retType body) =
   in case expectReturn localEnv retType body of
     Left err -> (env, Left $ "Type error in function: " ++ err)
     Right _ -> ((vars, updatedFuncs), Right TNone)
-  {-  
-     case typecheck localEnv body of
-    (_, Left err) -> (env, Left err)
-    (_, Right bodyType) -> 
-      if bodyType == retType 
-      then
-        let newFuncs = insert name (map fst params, retType) funcs
-        in ((vars, newFuncs), Right TNone)
-      else 
-        (env, Left $ "Type error: function '" ++ name ++ "' declared return type " ++ show retType ++ " but returns " ++ show bodyType)
-  -}
 
 typecheck env@(vars, funcs) (Procedure name params body) = 
   let 
