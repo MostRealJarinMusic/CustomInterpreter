@@ -4,13 +4,13 @@ import Data.Map ( Map, insert, lookup, empty, union, fromList, toList, delete )
 import Definitions
 import Utility 
 
-
+--Evaluation function for the interpreter
 evaluate :: Environment -> Expr -> IO (Value, Environment)
 evaluate env (Lit value) = return (value, env)
 
 evaluate env (Declare varType name expr) = do
   let (vars, funcs) = env
-  case lookupVariable name vars of
+  case lookupVariable name vars of  --Looking up a variable in the scoped environment
     Just _ -> do
       putStrLn $ "Compile error: variable '" ++ name ++ "' is already assigned"
       return (VError, env)
