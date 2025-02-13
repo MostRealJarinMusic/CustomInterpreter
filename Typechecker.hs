@@ -6,6 +6,7 @@ import Definitions
 
 type FunctionTypes = Map String ([Type], Type)
 type VariableTypes = Map String Type
+type ScopedVariableTypes = [VariableTypes]
 type EnvironmentTypes = (VariableTypes, FunctionTypes)
 
 --Typechecking

@@ -40,7 +40,7 @@ data Value
   = VInt Int
   | VString String
   | VBool Bool
-  | VGeneric String--Generic types - allowing polymorphism
+  | VGeneric String --Generic types - allowing polymorphism
   | VNone
   | VError
   deriving (Eq, Show)
@@ -50,7 +50,7 @@ data Type
   = TInt
   | TString
   | TBool 
-  | TGeneric
+  | TGeneric --Generic types 
   | TNone
   deriving (Eq, Show)
 
@@ -73,7 +73,7 @@ data Pattern
   | PWildcard
   deriving (Eq, Show)
 
---Defining tokens for the tokenizer and parse to work with
+--Defining tokens for the tokenizer and parser to work with
 data Token 
   = TokInt Int
   | TokString String
