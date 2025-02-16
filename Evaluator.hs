@@ -11,7 +11,7 @@ import qualified Data.Bifunctor
 --(Value, Environment) - the value represents the 'value' of our expression
 --                       the environment represents the changed 'memory' following the execution of the expression
 evaluate :: Environment -> Expr -> IO (Value, Environment)
-evaluate env (Lit value) = return (value, env) -- Calling a literal
+evaluate env (Lit value) = return (value, env)                                                    --Calling a literal
 
 evaluate env (Declare varType name expr) = do
   let (vars, funcs) = env
@@ -34,7 +34,7 @@ evaluate env (Set name expr) =
       if val == VError
       then return (VError, env')                                                                  --Error in the expression
       else return (VNone, (updateVariable name (existingType, val) vars', funcs'))                --Updates a variable
-    _ -> do
+    _ -> do                                                                                       --The variable does not exist
       putStrLn $ "Compile error: variable '" ++ name ++ "' not declared"
       return (VError, env)
 
@@ -75,13 +75,6 @@ evaluate env (UnOp op expr) = do
         return (VError, env')
       Right validResult -> return (validResult, env')                                                              --Valid operation
 
-evaluate env (IfElse pred trueExpr falseExpr) = do
-  (predicateValue, env') <- evaluate env pred                                                                     --Evaluates the predicate
-  if predicateValue == VError
-  then return (VError, env')                                                                                      --Errors with the predicate
-  else case predicateValue of
-    VBool True -> evaluate env' trueExpr                                                                          --Evaluate true branch
-    VBool False -> evaluate env' falseExpr                                                                        --Evaluate false branch
 {-
 evaluate env (Seq [])         = return (VNone, env)
 evaluate env (Seq (expr:exprs)) = do
@@ -124,7 +117,15 @@ evaluate env@(vars, funcs) (Block exprs) = do
           return (VError, env')                                                                                   --Error in the block    
         VNone     -> evaluateBlock env' exprs                                                                     --Recursively evaluate the next section in the sequence
         _         -> return (value, env')                                                                         --If we are expected to return something from the block, return it
-  
+
+
+evaluate env (IfElse pred trueExpr falseExpr) = do
+  (predicateValue, env') <- evaluate env pred                                                                     --Evaluates the predicate
+  if predicateValue == VError
+  then return (VError, env')                                                                                      --Errors with the predicate
+  else case predicateValue of
+    VBool True -> evaluate env' trueExpr                                                                          --Evaluate true branch
+    VBool False -> evaluate env' falseExpr                                                                        --Evaluate false branch
 
 evaluate env (While pred expr) = do
   (predicateValue, env') <- evaluate env pred                                                                     --Evaluate the predicate

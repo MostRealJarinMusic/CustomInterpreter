@@ -11,7 +11,7 @@ type EnvironmentTypes = (VariableTypes, FunctionTypes)
 
 --Typechecking
 typecheck :: EnvironmentTypes -> Expr -> (EnvironmentTypes, Either String Type)
---Literals
+--Literals - mapping values to types
 typecheck env (Lit (VInt    _)) = (env, Right TInt)
 typecheck env (Lit (VBool   _)) = (env, Right TBool)
 typecheck env (Lit (VString _)) = (env, Right TString)
