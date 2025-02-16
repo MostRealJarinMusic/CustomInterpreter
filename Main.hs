@@ -102,8 +102,6 @@ testProgram =
       )
     , Print (Call "factorial" [Lit (VInt 5)])
     ]
-
--}
 testProgram = 
   Seq
     [ Declare TInt "i" (Lit (VInt 0)),
@@ -119,6 +117,22 @@ testProgram =
             Set "i" (BinOp Add (Get "i") (Lit (VInt 1)))
           ])
     ]
+-}
+
+
+testProgram = 
+  Seq [
+    Declare TInt "x" (Lit (VInt 10)),    -- Declare x and assign 10
+    IfElse (BinOp Gt (Get "x") (Lit (VInt 5))) (
+        Seq [
+            Declare TInt "x" (Lit (VInt 20)),  -- Shadow x inside the if branch
+            Print (Get "x")                    -- Print the shadowed x (should print 20)
+        ]
+    ) (
+        Print (Get "x")                    -- This branch won't be executed
+    ),
+    Print (Get "x")                        -- Print outer x (should print 10)
+  ]
 
 
 run :: Expr -> IO ()
@@ -134,7 +148,7 @@ run expr =
 
 --Interpreter sections
 evaluateProgram :: Expr -> IO (Value, Environment)
-evaluateProgram = evaluate ([], empty)
+evaluateProgram = evaluate ([empty], empty)
 
 typecheckProgram :: Expr -> Either String Type
 typecheckProgram program = 

@@ -10,9 +10,9 @@ data Expr
   | Lit Value  --Literals
   | BinOp BinOp Expr Expr --Binary operations
   | UnOp UnOp Expr --Unary operations
-  | IfElse Expr Expr Expr --If-else statements
   | Seq [Expr] --Sequence - no new variable scopes
   | Block [Expr] --Blocks - introduces a new variable scope
+  | IfElse Expr Expr Expr --If-else statements                                                    Add Maybe Expr to allow for single if statements
   | While Expr Expr --While loops
   | DoWhile Expr Expr --Do-while loops
   | Skip -- Skip
@@ -22,6 +22,7 @@ data Expr
   | Return Expr --Returning a value from a function
   | Call String [Expr] --Calling a function
   deriving (Show)
+
 
 --Defining binary operations
 data BinOp 

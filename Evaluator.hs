@@ -15,7 +15,7 @@ evaluate env (Lit value) = return (value, env) -- Calling a literal
 
 evaluate env (Declare varType name expr) = do
   let (vars, funcs) = env
-  case lookupVariable name vars of                                                                --Looking up a variable in the scoped environment     --SHOULD ONLY LOOK AT THE MOST RECENT SCOPE
+  case lookup name (head vars) of                                                                 --Looking up a variable in the most recent scope
     Just _ -> do                                                                                  --The variable already exists - we cannot declare a variable with the same name
       putStrLn $ "Compile error: variable '" ++ name ++ "' is already assigned"
       return (VError, env)
@@ -93,28 +93,38 @@ evaluate env (Seq (expr:exprs)) = do
       return (VError, env')
 -}
 
-evaluate env (Seq []) = return (VNone, env)                                                                       --End of a sequence block
-evaluate env@(vars, funcs) (Seq exprs) = do
-  let scopedEnv = (enterScope vars, funcs)                                                                        --Enter a new variable scope within a sequence block
-  --print scopedEnv
-  scopedResult <- evaluateSequence scopedEnv exprs                                                                --Evaluate the sequence block
-  case scopedResult of
-    (value, scopedEnv') -> do
-      let finalEnv = Data.Bifunctor.first exitScope scopedEnv'                                                    --Exit the new variable scope
-      --print (fst finalEnv)
-      return (value, finalEnv)                                                                                    
-  where
-    evaluateSequence env [] = return (VNone, env)                                                                 --End of a sequence block
-    evaluateSequence env (expr:exprs) = do
-      (value, env') <- evaluate env expr                                                                          --Evaluate a line in the sequence
-      --print value
-      case value of
-        VError     -> do
-          putStrLn "Compile error: error within sequence block"
-          return (VError, env')                                                                                   --Error on that line in the sequence
-        VNone      -> evaluateSequence env' exprs                                                                 --Recursively evaluate the next section in the sequence
-        _ -> return (value, env')                                                                                 --If we are expected to return something in the block, return it
+--Sequences do not enter a new scope
+evaluate env (Seq [])           = return (VNone, env)                                                             --End of a sequence
+evaluate env (Seq (expr:exprs)) = do
+  (value, env') <- evaluate env expr                                                                              --Evaluate a line in the sequence
+  --print value
+  case value of
+    VError     -> do
+      putStrLn "Compile error: error within sequence block"
+      return (VError, env')                                                                                       --Error on that line in the sequence
+    VNone      -> evaluate env' (Seq exprs)                                                                       --Recursively evaluate the next section in the sequence
+    _ -> return (value, env')                                                                                     --If we are expected to return something in the block, return it
 
+--Blocks do enter a new scope
+evaluate env               (Block [])    = return (VNone, env)                                                    --Empty scoped block
+evaluate env@(vars, funcs) (Block exprs) = do
+  let scopedEnv = (enterScope vars, funcs)                                                                        --Enter a new variable scope within the block
+  scopedResult <- evaluateBlock scopedEnv exprs                                                                   --Evaluate the block
+  case scopedResult of 
+    (value, scopedEnv') -> do
+      let finalEnv = Data.Bifunctor.first exitScope scopedEnv'                                                    --Exit the new variable scope and return
+      return (value, finalEnv)
+  where
+    evaluateBlock env []           = return (VNone, env)                                                          --End of a block
+    evaluateBlock env (expr:exprs) = do
+      (value, env') <- evaluate env expr                                                                          --Evaluate a line in the block
+      case value of 
+        VError    -> do
+          putStrLn "Compile error: error within scoped block"
+          return (VError, env')                                                                                   --Error in the block    
+        VNone     -> evaluateBlock env' exprs                                                                     --Recursively evaluate the next section in the sequence
+        _         -> return (value, env')                                                                         --If we are expected to return something from the block, return it
+  
 
 evaluate env (While pred expr) = do
   (predicateValue, env') <- evaluate env pred                                                                     --Evaluate the predicate
