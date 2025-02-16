@@ -4,23 +4,23 @@ import Data.Map (Map)
 --Here, we define the AST
 --Loosely based on Haskell's Core
 data Expr 
-  = Set String Expr --Assignment
-  | Declare Type String Expr --Declaration
-  | Get String --Access
-  | Lit Value  --Literals
-  | BinOp BinOp Expr Expr --Binary operations
-  | UnOp UnOp Expr --Unary operations
-  | Seq [Expr] --Sequence - no new variable scopes
-  | Block [Expr] --Blocks - introduces a new variable scope
-  | IfElse Expr Expr Expr --If-else statements                                                    Add Maybe Expr to allow for single if statements
-  | While Expr Expr --While loops
-  | DoWhile Expr Expr --Do-while loops
-  | Skip -- Skip
-  | Print Expr --Printing
-  | Function String [(Type, String)] Type Expr --Function declaration
-  | Procedure String [(Type, String)] Expr --Procedure declaration
-  | Return Expr --Returning a value from a function
-  | Call String [Expr] --Calling a function
+  = Set String Expr                                       --Assignment
+  | Declare Type String Expr                              --Declaration
+  | Get String                                            --Access
+  | Lit Value                                             --Literals
+  | BinOp BinOp Expr Expr                                 --Binary operations
+  | UnOp UnOp Expr                                        --Unary operations
+  | Seq [Expr]                                            --Sequence - no new variable scopes
+  | Block [Expr]                                          --Blocks - introduces a new variable scope
+  | IfElse Expr Expr Expr                                 --If-else statements                                  Add Maybe Expr to allow for single if statements
+  | While Expr Expr                                       --While loops
+  | DoWhile Expr Expr                                     --Do-while loops
+  | Skip                                                  --Skip
+  | Print Expr                                            --Printing
+  | Function String [(Type, String)] Type Expr            --Function declaration
+  | Procedure String [(Type, String)] Expr                --Procedure declaration
+  | Return Expr                                           --Returning a value from a function
+  | Call String [Expr]                                    --Calling a function / procedure
   deriving (Show)
 
 
