@@ -78,10 +78,10 @@ evaluate env (UnOp op expr) = do
 evaluate env (IfElse pred trueExpr falseExpr) = do
   (predicateValue, env') <- evaluate env pred                                                                     --Evaluates the predicate
   if predicateValue == VError
-  then return (VError, env')
+  then return (VError, env')                                                                                      --Errors with the predicate
   else case predicateValue of
-    VBool True -> evaluate env' trueExpr
-    VBool False -> evaluate env' falseExpr
+    VBool True -> evaluate env' trueExpr                                                                          --Evaluate true branch
+    VBool False -> evaluate env' falseExpr                                                                        --Evaluate false branch
 {-
 evaluate env (Seq [])         = return (VNone, env)
 evaluate env (Seq (expr:exprs)) = do
@@ -93,95 +93,94 @@ evaluate env (Seq (expr:exprs)) = do
       return (VError, env')
 -}
 
-evaluate env (Seq []) = return (VNone, env)
+evaluate env (Seq []) = return (VNone, env)                                                                       --End of a sequence block
 evaluate env@(vars, funcs) (Seq exprs) = do
-  let scopedEnv = (enterScope vars, funcs)
+  let scopedEnv = (enterScope vars, funcs)                                                                        --Enter a new variable scope within a sequence block
   --print scopedEnv
-  scopedResult <- evaluateSequence scopedEnv exprs
+  scopedResult <- evaluateSequence scopedEnv exprs                                                                --Evaluate the sequence block
   case scopedResult of
     (value, scopedEnv') -> do
-      let finalEnv = Data.Bifunctor.first exitScope scopedEnv'
+      let finalEnv = Data.Bifunctor.first exitScope scopedEnv'                                                    --Exit the new variable scope
       --print (fst finalEnv)
-      return (value, finalEnv)
+      return (value, finalEnv)                                                                                    
   where
-    evaluateSequence env [] = return (VNone, env)
+    evaluateSequence env [] = return (VNone, env)                                                                 --End of a sequence block
     evaluateSequence env (expr:exprs) = do
-      (value, env') <- evaluate env expr
+      (value, env') <- evaluate env expr                                                                          --Evaluate a line in the sequence
       --print value
       case value of
         VError     -> do
           putStrLn "Compile error: error within sequence block"
-          return (VError, env')
-        VNone      -> evaluateSequence env' exprs
-        _ -> return (value, env')
+          return (VError, env')                                                                                   --Error on that line in the sequence
+        VNone      -> evaluateSequence env' exprs                                                                 --Recursively evaluate the next section in the sequence
+        _ -> return (value, env')                                                                                 --If we are expected to return something in the block, return it
 
 
 evaluate env (While pred expr) = do
-  (predicateValue, env') <- evaluate env pred
+  (predicateValue, env') <- evaluate env pred                                                                     --Evaluate the predicate
   case predicateValue of
-    VError      -> return (VError, env')
-    VBool False -> return (VNone, env')
+    VError      -> return (VError, env')                                                                          --Error with the predicate
+    VBool False -> return (VNone, env')                                                                           --Predicate evaluates to false - exit the while loop
     _           -> do
-      (_, env'') <- evaluate env' expr
-      evaluate env'' (While pred expr)
+      (_, env'') <- evaluate env' expr                                                                            --Evaluate the while block
+      evaluate env'' (While pred expr)                                                                            --Continue the while loop
 
-evaluate env (DoWhile pred expr) = do
-  (value, env') <- evaluate env expr
+evaluate env (DoWhile pred expr) = do   
+  (value, env') <- evaluate env expr                                                                              --Evaluate the predicate
   if value /= VNone
-  then return (VError, env')
+  then return (VError, env')                                                                                      --Error with the predicate
   else do
-    (predicateValue, env'') <- evaluate env' pred
+    (predicateValue, env'') <- evaluate env' pred                                                                 --Evaluate the do-while block
     case predicateValue of
-      VError      -> return (VError, env')
-      VBool False -> return (VNone, env'')
-      _ -> evaluate env'' (DoWhile pred expr)
+      VError      -> return (VError, env')                                                                        --Error with the predicate
+      VBool False -> return (VNone, env'')                                                                        --Predicate evaluates to false - exit the do-while loop
+      _ -> evaluate env'' (DoWhile pred expr)                                                                     --Continue the do-while block
 
-evaluate env Skip = return (VNone, env)
+evaluate env Skip = return (VNone, env)                                                                           --Skip
 
 evaluate env (Print expr) = do
-  (value, env') <- evaluate env expr
+  (value, env') <- evaluate env expr                                                                              --Evaluate the expression
   case value of
-    VError -> return (VError, env')
+    VError -> return (VError, env')                                                                               --Error with the expression
     _      -> do
-      putStrLn (prettyPrint value)
-      return (VNone, env')
+      putStrLn (prettyPrint value)                                                                                --Print to the console
+      return (VNone, env')                                
 
-evaluate env (Return expr) = evaluate env expr
+evaluate env (Return expr) = evaluate env expr                                                                    --Evaluate the expression
 
-evaluate env (Function name params returnType expr) =
-  let func = (params, returnType, expr)
-      (vars, funcs) = env
-  in return (VNone, (vars, insert name func funcs))
+evaluate (vars, funcs) (Function name params returnType expr) =
+  let func = (params, returnType, expr)                                                                           --Define the function
+  in return (VNone, (vars, insert name func funcs))                                                               --Add the function to the environment
 
 evaluate (vars, funcs) (Procedure name params expr) =
-  let func = (params, TNone, expr)
-  in return (VNone, (vars, insert name func funcs))
+  let func = (params, TNone, expr)                                                                                --Define the procedure
+  in return (VNone, (vars, insert name func funcs))                                                               --Add the procedure to the environment
 
 evaluate env@(_, funcs) (Call name args) =
-  case lookup name funcs of
+  case lookup name funcs of                                                                                       --Look up the function in the environment
     Nothing -> do
-      putStrLn $ "Compile error: function '" ++ name ++ "' is not defined"
+      putStrLn $ "Compile error: function '" ++ name ++ "' is not defined"                                        --The function does not exist
       return (VError, env)
-    Just (params, retType, body) ->
-      if length params /= length args
+    Just (params, retType, body) ->                                                                               --The function exists
+      if length params /= length args                                                                             --Matching number of arguments - assuming they are the correct corresponding types
       then do
-        putStrLn $ "Compile error: incorrect number of arguments supplied to function '" ++ name ++ "'"
+        putStrLn $ "Compile error: incorrect number of arguments supplied to function '" ++ name ++ "'"           --Incorrect number of arguments
         return (VError, env)
       else do
-        (definedArgs, env') <- evalArgs env args
+        (definedArgs, env') <- evalArgs env args                                                                  --Evaluate all of the arguments
         let (varScopes, funcs') = env'
 
-        let boundParams = fromList [(n, (t, v)) | ((t, n), v) <- zip params definedArgs]
-        let newVarScopes = enterScope varScopes
-        let funcScope = insertVariables (toList boundParams) newVarScopes
+        let boundParams = fromList [(n, (t, v)) | ((t, n), v) <- zip params definedArgs]                          --Create a new set of variables from the entered parameters
+        let newVarScopes = enterScope varScopes                                                                   --Enter a new variable scope
+        let funcScope = insertVariables (toList boundParams) newVarScopes                                         --Insert the variables into the new scope
 
-        let funcEnv = (funcScope, funcs')
-        (result, updatedEnv) <- evaluate funcEnv body
-        let (updatedScopes, _) = updatedEnv
-        let finalScopes = exitScope updatedScopes
-        let newEnv = (finalScopes, funcs')
+        let funcEnv = (funcScope, funcs')                                                                         --Alias for the new function environment
+        (result, updatedEnv) <- evaluate funcEnv body                                                             --Evaluate the function - works for both functions and procedures
+        let (updatedScopes, _) = updatedEnv                                                                       --Alias for the updated environment
+        let finalScopes = exitScope updatedScopes                                                                 --Exit the scope
+        let newEnv = (finalScopes, funcs')                                                                        --Alias for the new scope
 
-        case retType of
+        case retType of                                                                                           --Return for the function
           TNone -> return (VNone, newEnv)
           _     -> return (result, newEnv)
 
@@ -199,12 +198,14 @@ prettyPrint (VInt n) = show n
 prettyPrint VNone = ""
 
 --Helper functions for evaluation
+--Defined 'base' unary operators
 evalUnOps :: UnOp -> Value -> Either String Value
 evalUnOps Neg (VInt x) = Right $ VInt (negate x)
 evalUnOps Neg _        = Left "Type error: incorrect type for negation"
 evalUnOps Not (VBool bool) = Right $ VBool (not bool)
 evalUnOps Not _            = Left "Type error: Incorrect type for logical NOT"
 
+--Defined 'base' binary operators
 evalBinOps :: BinOp -> Value -> Value -> Either String Value
 evalBinOps Add (VInt x) (VInt y) = Right $ VInt (x + y)
 evalBinOps Add (VString x) (VString y) = Right $ VString (x ++ y)
@@ -237,8 +238,8 @@ evalBinOps op  _        _        = Left $ "Type error: attempt to apply " ++ sho
 
 
 evalArgs :: Environment -> [Expr] -> IO ([Value], Environment)
-evalArgs env []     = return ([], env)
-evalArgs env (expr:exprs) = do
-  (val, env') <- evaluate env expr
-  (vals, env'') <- evalArgs env' exprs
-  return (val : vals, env'')
+evalArgs env []     = return ([], env)                                  --No arguments left to evaluate - return the evaluted arguments
+evalArgs env (expr:exprs) = do                                          
+  (val, env') <- evaluate env expr                                      --Evaluate the current argument
+  (vals, env'') <- evalArgs env' exprs                                  --Recursively evaluate the rest
+  return (val : vals, env'')                                            --Accumulate the evaluated arguments and return them
