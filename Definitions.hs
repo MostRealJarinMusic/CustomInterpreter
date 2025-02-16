@@ -11,7 +11,8 @@ data Expr
   | BinOp BinOp Expr Expr --Binary operations
   | UnOp UnOp Expr --Unary operations
   | IfElse Expr Expr Expr --If-else statements
-  | Seq [Expr] --Sequence
+  | Seq [Expr] --Sequence - no new variable scopes
+  | Block [Expr] --Blocks - introduces a new variable scope
   | While Expr Expr --While loops
   | DoWhile Expr Expr --Do-while loops
   | Skip -- Skip
