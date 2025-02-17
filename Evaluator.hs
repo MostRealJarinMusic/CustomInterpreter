@@ -183,13 +183,15 @@ evaluate env@(_, funcs) (Call name args) =
 
         let boundParams = fromList [(n, (t, v)) | ((t, n), v) <- zip params definedArgs]                          --Create a new set of variables from the entered parameters
         let newVarScopes = enterScope varScopes                                                                   --Enter a new variable scope
-        let funcScope = insertVariables (toList boundParams) newVarScopes                                         --Insert the variables into the new scope
+        let funcScopes = insertVariables (toList boundParams) newVarScopes                                         --Insert the variables into the new scope
 
-        let funcEnv = (funcScope, funcs')                                                                         --Alias for the new function environment
+        let funcEnv = (funcScopes, funcs')                                                                         --Alias for the new function environment
+        print funcScopes
         (result, updatedEnv) <- evaluate funcEnv body                                                             --Evaluate the function - works for both functions and procedures
         let (updatedScopes, _) = updatedEnv                                                                       --Alias for the updated environment
         let finalScopes = exitScope updatedScopes                                                                 --Exit the scope
-        let newEnv = (finalScopes, funcs')                                                                        --Alias for the new scope
+        let newEnv = (finalScopes, funcs')                                                                        --Alias for the new environment
+        print finalScopes
 
         case retType of                                                                                           --Return for the function
           TNone -> return (VNone, newEnv)
