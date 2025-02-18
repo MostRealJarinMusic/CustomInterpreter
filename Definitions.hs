@@ -1,12 +1,14 @@
-module Definitions (Expr(..), BinOp(..), UnOp(..), Value(..), Type(..), Variables, ScopedVariables, Functions, Environment, Token(..)) where
+module Definitions (Identifier, Expr(..), BinOp(..), UnOp(..), Value(..), Type(..), Variables, ScopedVariables, Functions, Environment, Token(..)) where
 import Data.Map (Map)
 
 --Here, we define the AST
 --Loosely based on Haskell's Core
+type Identifier = String
+
 data Expr 
-  = Set String Expr                                       --Assignment
-  | Declare Type String Expr                              --Declaration
-  | Get String                                            --Access
+  = Set Identifier Expr                                       --Assignment
+  | Declare Type Identifier Expr                              --Declaration
+  | Get Identifier                                            --Access
   | Lit Value                                             --Literals
   | BinOp BinOp Expr Expr                                 --Binary operations
   | UnOp UnOp Expr                                        --Unary operations
@@ -17,8 +19,8 @@ data Expr
   | DoWhile Expr Expr                                     --Do-while loops
   | Skip                                                  --Skip
   | Print Expr                                            --Printing
-  | Function String [(Type, String)] Type Expr            --Function declaration
-  | Procedure String [(Type, String)] Expr                --Procedure declaration
+  | Function Identifier [(Type, Identifier)] Type Expr            --Function declaration
+  | Procedure Identifier [(Type, Identifier)] Expr                --Procedure declaration
   | Return Expr                                           --Returning a value from a function
   | Call String [Expr]                                    --Calling a function / procedure
   deriving (Show)
@@ -57,11 +59,11 @@ data Type
   deriving (Eq, Show)
 
 --Defining variables as a dictionary of 'names' to 'type-values'
-type Variables = Map String (Type, Value)
+type Variables = Map Identifier (Type, Value)
 type ScopedVariables = [Variables]
 
 --Defining functions as a dictionary of 'names' to 'parameters-type-expressions'
-type Functions = Map String ([(Type, String)], Type, Expr)
+type Functions = Map Identifier ([(Type, Identifier)], Type, Expr)
 
 --Defining the environment
 type Environment = (ScopedVariables, Functions)
