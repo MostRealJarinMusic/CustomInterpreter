@@ -1,4 +1,4 @@
-module Utility (lookupVariable, updateVariable, insertVariable, enterScope, exitScope) where
+module Utility (lookupVariable, updateVariable, insertVariable, insertVariables, enterScope, exitScope) where
 import Prelude hiding (lookup)
 import Data.Map ( Map, insert, lookup, empty, union, fromList, delete, member )
 import Definitions
@@ -25,6 +25,10 @@ updateVariable name typeVal (scope:rest) =
 insertVariable :: String -> (Type, Value) -> ScopedVariables -> ScopedVariables
 insertVariable _ _ [] = error "No scope to insert variable"
 insertVariable name typeVal (scope:rest) = insert name typeVal scope : rest
+
+--Inserting multiple variables into the current scope
+insertVariables :: [(String, (Type, Value))] -> ScopedVariables -> ScopedVariables
+insertVariables vars scopes = foldr (\(name, typeVal) sc -> insertVariable name typeVal sc) scopes vars
 
 --Adds a new scope to the environment
 enterScope :: ScopedVariables -> ScopedVariables
