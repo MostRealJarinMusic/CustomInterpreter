@@ -198,9 +198,7 @@ evaluate env@(_, funcs) (Call name args) =
           _     -> return (result, newEnv)
 
 
---Helper for inserting variables into a new scope
-insertVariables :: [(String, (Type, Value))] -> ScopedVariables -> ScopedVariables
-insertVariables vars scopes = foldr (\(name, typeVal) sc -> insertVariable name typeVal sc) scopes vars
+
 
 
 --Helper for printing
