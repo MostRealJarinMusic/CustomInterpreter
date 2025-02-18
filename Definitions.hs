@@ -1,29 +1,53 @@
-module Definitions (Identifier, Expr(..), BinOp(..), UnOp(..), Value(..), Type(..), Variables, ScopedVariables, Functions, Environment, Token(..)) where
+module Definitions (Identifier, Expr(..), Stmt(..), BinOp(..), UnOp(..), Value(..), Type(..), Variables, ScopedVariables, Functions, Environment, Token(..)) where
 import Data.Map (Map)
 
 --Here, we define the AST
 --Loosely based on Haskell's Core
 type Identifier = String
 
+{-
 data Expr 
   = Set Identifier Expr                                       --Assignment
   | Declare Type Identifier Expr                              --Declaration
   | Get Identifier                                            --Access
-  | Lit Value                                             --Literals
-  | BinOp BinOp Expr Expr                                 --Binary operations
-  | UnOp UnOp Expr                                        --Unary operations
-  | Seq [Expr]                                            --Sequence - no new variable scopes
-  | Block [Expr]                                          --Blocks - introduces a new variable scope
-  | IfElse Expr Expr Expr                                 --If-else statements                                  Add Maybe Expr to allow for single if statements
-  | While Expr Expr                                       --While loops
-  | DoWhile Expr Expr                                     --Do-while loops
-  | Skip                                                  --Skip
-  | Print Expr                                            --Printing
-  | Function Identifier [(Type, Identifier)] Type Expr            --Function declaration
-  | Procedure Identifier [(Type, Identifier)] Expr                --Procedure declaration
-  | Return Expr                                           --Returning a value from a function
-  | Call String [Expr]                                    --Calling a function / procedure
+  | Lit Value                                                 --Literals
+  | BinOp BinOp Expr Expr                                     --Binary operations
+  | UnOp UnOp Expr                                            --Unary operations
+  | Seq [Expr]                                                --Sequence - no new variable scopes
+  | Block [Expr]                                              --Blocks - introduces a new variable scope
+  | IfElse Expr Expr Expr                                     --If-else statements                                  Add Maybe Expr to allow for single if statements
+  | While Expr Expr                                           --While loops
+  | DoWhile Expr Expr                                         --Do-while loops
+  | Skip                                                      --Skip
+  | Print Expr                                                --Printing
+  | Function Identifier [(Type, Identifier)] Type Expr        --Function declaration
+  | Procedure Identifier [(Type, Identifier)] Expr            --Procedure declaration
+  | Return Expr                                               --Returning a value from a function
+  | Call String [Expr]                                        --Calling a function / procedure
   deriving (Show)
+-}
+
+data Expr
+  = Get Identifier
+  | Lit Value
+  | BinOp BinOp Expr Expr
+  | UnOp UnOp Expr
+  | Call Identifier [Expr]
+  deriving Show
+
+data Stmt 
+  = ExprStmt Expr
+  | IfElse Expr Expr (Maybe Expr)
+  | While Expr [Stmt]
+  | DoWhile Expr [Stmt]
+  | Declare Type Identifier (Maybe Expr)
+  | Set Identifier Expr
+  | Return (Maybe Expr)
+  | Print Expr
+  | Block [Stmt]
+  | Function Identifier [(Type, Identifier)] Type [Stmt]        --Function declaration
+  | Procedure Identifier [(Type, Identifier)] [Stmt]            --Procedure declaration
+  deriving Show
 
 
 --Defining binary operations
@@ -63,7 +87,7 @@ type Variables = Map Identifier (Type, Value)
 type ScopedVariables = [Variables]
 
 --Defining functions as a dictionary of 'names' to 'parameters-type-expressions'
-type Functions = Map Identifier ([(Type, Identifier)], Type, Expr)
+type Functions = Map Identifier ([(Type, Identifier)], Type, [Stmt])
 
 --Defining the environment
 type Environment = (ScopedVariables, Functions)

@@ -1,7 +1,7 @@
 module Main where
 import Data.Map ( empty )
 import Definitions
-import Typechecker
+--import Typechecker
 import Evaluator (evaluate)
 
 
@@ -117,9 +117,6 @@ testProgram =
             Set "i" (BinOp Add (Get "i") (Lit (VInt 1)))
           ])
     ]
--}
-
-
 testProgram = 
   Seq [
     Declare TInt "x" (Lit (VInt 10)),    -- Declare x and assign 10
@@ -134,6 +131,23 @@ testProgram =
     Print (Get "x")                        -- Print outer x (should print 10)
   ]
 
+-}
+
+
+testProgram = 
+      Seq 
+        [ 
+          Declare TInt "n" (Lit (VInt 10)),
+          IfElse (BinOp Eq (Get "n") (Lit (VInt 0)))
+          (Seq 
+            [Declare TInt "x" (Lit (VInt 1))]
+          )
+          (Seq 
+            [Print (Get "x")]
+          )
+        ]
+      
+{-
 
 run :: Expr -> IO ()
 run expr = 
@@ -146,14 +160,19 @@ run expr =
       evaluateProgram expr
       return ()
 
---Interpreter sections
-evaluateProgram :: Expr -> IO (Value, Environment)
-evaluateProgram = evaluate ([empty], empty)
-
 typecheckProgram :: Expr -> Either String Type
 typecheckProgram program = 
-  let (_, finalType) = typecheck (empty, empty) program
+  let (_, finalType) = typecheck ([empty], empty) program
   in case finalType of
     Left err -> Left err
     Right TNone -> Right TNone
     Right _ -> Left "Type error: incorrect type for program"
+
+-}
+
+
+--Interpreter sections
+evaluateProgram :: Expr -> IO (Value, Environment)
+evaluateProgram = evaluate ([empty], empty)
+
+

@@ -1,13 +1,16 @@
+{-
 module Typechecker (typecheck) where
 import Prelude hiding (lookup)
-import Data.Map ( Map, insert, lookup, empty, fromList, union )
+import Data.Map ( Map, insert, lookup, empty, fromList, toList, union )
 import Definitions
+import Utility
+
 
 
 type FunctionTypes = Map String ([Type], Type)
-type VariableTypes = Map String Type
-type ScopedVariableTypes = [VariableTypes]
-type EnvironmentTypes = (VariableTypes, FunctionTypes)
+--type VariableTypes = Map String Type
+--type ScopedVariableTypes = [VariableTypes]
+type EnvironmentTypes = (ScopedVariables, FunctionTypes)
 
 --Typechecking
 typecheck :: EnvironmentTypes -> Expr -> (EnvironmentTypes, Either String Type)
@@ -15,36 +18,39 @@ typecheck :: EnvironmentTypes -> Expr -> (EnvironmentTypes, Either String Type)
 typecheck env (Lit (VInt    _)) = (env, Right TInt)
 typecheck env (Lit (VBool   _)) = (env, Right TBool)
 typecheck env (Lit (VString _)) = (env, Right TString)
+
 --Declarations
 typecheck env@(vars, funcs) (Declare varType name expr) =
   let (env', exprType) = typecheck env expr
   in case exprType of
-    Left err -> (env', Left err)
+    Left err -> (env', Left err)                                                                                                                                      --Propagate errors
     Right exprType' -> do
       if exprType' == varType
-      then ((insert name varType vars, funcs), Right TNone)
-      else (env', Left $ "Type error in declaration: variable '" ++ name ++ "' declared as " ++ show varType ++ " but expression evaluates to " ++ show exprType')
+      then ((insertVariable name (varType, undefined) vars, funcs), Right TNone)                                                                                      --Insert the variable into the scope
+      else (env', Left $ "Type error in declaration: variable '" ++ name ++ "' declared as " ++ show varType ++ " but expression evaluates to " ++ show exprType')    --Mismatched type with declaration
+      
 --Assignment
 typecheck env@(vars, funcs) (Set name expr) =
   let (env', exprType) = typecheck env expr
   in case exprType of
-    Left err -> (env', Left err)
+    Left err -> (env', Left err)                                                                                                                                              --Propagate errors
     Right exprType' -> 
-      case lookup name vars of 
-        Just existingType | existingType /= exprType' -> 
+      case lookupVariable name vars of 
+        Just (existingType, _) | existingType /= exprType' ->                                                                                                                 --Mismatched types 
           (env', Left $ "Type error in assignment: variable '" ++ name ++ "' has type " ++ show existingType ++ " but the expression evaluates to " ++ show exprType )
-        Nothing -> (env', Left $ "Compile error in assignment: variable '" ++ name ++ "' not found" )
-        _ -> (env', Right TNone)
+        Nothing -> (env', Left $ "Compile error in assignment: variable '" ++ name ++ "' not found" )                                                                         --Variable doesn't exist
+        _ -> (env', Right TNone)                                                                                                                                              --Continue
 --Access
 typecheck env@(vars, funcs) (Get name) = do
-  case lookup name vars of
-    Nothing -> (env, Left $ "Compile error in access: variable '" ++ name ++ "' not found" )
-    Just existingType -> (env, Right existingType)
+  case lookupVariable name vars of
+    Nothing -> (env, Left $ "Compile error in access: variable '" ++ name ++ "' not found" )                                                         --Variable doesn't exist
+    Just (existingType, _) -> (env, Right existingType)                                                                                              --Return the variable's type
+
 --Binary operators
 typecheck env (BinOp op expr1 expr2) =
   let 
     (env', exprType1) = typecheck env expr1
-    (env'', exprType2) = typecheck env' expr2
+    (env'', exprType2) = typecheck env' expr2                                                                           --Evaluate both operands
   in case (op, exprType1, exprType2) of
     (Add, Right TInt,    Right TInt)    -> (env'', Right TInt)
     (Add, Right TString, Right TString) -> (env'', Right TString)
@@ -74,16 +80,45 @@ typecheck env (BinOp op expr1 expr2) =
     _                                   -> (env'', Left $ "Type error in binary operator: " ++ show op ++ " cannot be applied to types " ++ show exprType1 ++ " and " ++ show exprType2)
 --Unary operators
 typecheck env (UnOp op expr) =
-  let (env', exprType) = typecheck env expr
+  let (env', exprType) = typecheck env expr                                                                               --Evaluate the operand
   in case (op, exprType) of
     (Neg, Right TInt)  -> (env', Right TInt)
     (Not, Right TBool) -> (env', Right TBool)
     _                  -> (env', Left $ "Type error in unary operator: incorrect type for " ++ show op)
+
+
+--Sequence
+typecheck env (Seq []) = (env, Right TNone)
+typecheck env (Seq sequence@(expr:exprs)) =
+  let (env', exprType) = typecheck env expr
+  in case exprType of
+    Left err -> (env', Left err)
+    Right TNone -> typecheck env' (Seq exprs)
+    Right t -> (env', Right t)
+
+--Blocks
+typecheck env (Block []) = (env, Right TNone)  -- Empty block returns TNone
+typecheck (vars, funcs) (Block exprs) = do
+  let scopedEnv = (enterScope vars, funcs) -- Enter a new scope
+      ((scopedVars', funcs'), finalType) = typecheckBlock scopedEnv exprs
+      finalEnv = (exitScope scopedVars', funcs') -- Exit the scope
+    in (finalEnv, finalType)
+  where
+    -- Helper function to type check a sequence of expressions in a block
+    typecheckBlock :: EnvironmentTypes -> [Expr] -> (EnvironmentTypes, Either String Type)
+    typecheckBlock env [] = (env, Right TNone) -- Empty block returns TNone
+    typecheckBlock env (expr:exprs) = 
+      let (env', typeResult) = typecheck env expr
+      in case typeResult of
+        Left err   -> (env', Left err) -- Propagate error
+        Right TNone -> typecheckBlock env' exprs -- Continue if no return value
+        Right t    -> (env', Right t) -- If returning something, stop checking
+
 --If-else statements
 typecheck env (IfElse pred expr1 expr2) =
   let (env', predType) = typecheck env pred
       (env'', expr1Type) = typecheck env' expr1
-      (env''', expr2Type) = typecheck env'' expr2
+      (env''', expr2Type) = typecheck env' expr2                                                                                       
   in case predType of
     Left err -> (env''', Left err)
     Right TBool -> 
@@ -93,14 +128,7 @@ typecheck env (IfElse pred expr1 expr2) =
         (Left err, _)              -> (env''', Left err)
         (_, Left err)              -> (env''', Left err)
     Right _ -> (env''', Left "Type error in if-else statement: condition in if-else statement must be a boolean")
---Sequence
-typecheck env (Seq []) = (env, Right TNone)
-typecheck env (Seq (expr:exprs)) =
-  let (env', exprType) = typecheck env expr
-  in case exprType of
-    Left err -> (env', Left err)
-    Right TNone -> typecheck env' (Seq exprs)
-    Right _ -> (env', Left "Type error in sequence: incorrect type within sequence")
+
 --While loops
 typecheck env (While pred expr) = 
   let (env', predType) = typecheck env pred
@@ -113,6 +141,7 @@ typecheck env (While pred expr) =
         Right TNone -> (env'', Right TNone)
         Right _     -> (env'', Left "Type error in while loop: incorrect type within while loop")
     Right _ -> (env'', Left "Type error in while loop: condition in while loop must be a boolean")
+  
 --Do-while loops
 typecheck env (DoWhile pred expr) = 
   let (env', predType) = typecheck env pred
@@ -125,6 +154,7 @@ typecheck env (DoWhile pred expr) =
         Right TNone -> (env'', Right TNone)
         Right _     -> (env'', Left "Type error in while loop: incorrect type within do-while loop")
     Right _ -> (env'', Left "Type error in while loop: condition in do-while loop must be a boolean")
+
 --Printing to 'console'
 typecheck env (Print expr) =
   let (env', exprType) = typecheck env expr
@@ -134,17 +164,45 @@ typecheck env (Print expr) =
 
 typecheck env Skip = (env, Right TNone)
 
+{-
 typecheck env@(vars, funcs) (Function name params retType body) = 
   let 
-    funcType = (map fst params, retType)
-    updatedFuncs = insert name funcType funcs
-
+    funcType = (map fst params, retType)                                                --Get the function type
+    updatedFuncs = insert name funcType funcs                                           --Add the function to the environment
     paramTypes = fromList [(n, t) | (t, n) <- params]
-    localEnv = (vars `union` paramTypes, updatedFuncs)
+    --localEnv = (vars `union` paramTypes, updatedFuncs)
+    scopedEnv = (enterScope vars, updatedFuncs) 
   in case expectReturn localEnv retType body of
     Left err -> (env, Left $ "Type error in function: " ++ err)
     Right _ -> ((vars, updatedFuncs), Right TNone)
+-}
 
+typecheck env@(vars, funcs) (Function name params retType body) = 
+  let
+    funcType = (map fst params, retType)                                                              --Define the function type signature
+    updatedFuncs = insert name funcType funcs                                                         --Add the type signature to the function environment
+    
+    paramTypes = fromList [(n, (t, undefined)) | (t, n) <- params]                                    --Map the parameter types 
+    newVarScope = enterScope vars                                                                     --Enter a new scope for the function
+    funcScopes = insertVariables (toList paramTypes) newVarScope                                      --Insert the new parameters into current scope
+
+    funcEnv = (funcScopes, updatedFuncs)                                                              --Alias for the environment before typechecking the function
+
+    (updatedEnv, result) = typecheck funcEnv body                                                     --Typecheck the function body
+    (updatedScopes, _) = updatedEnv                                                                   --Unalias the environment after typechecking the function
+    finalScopes = exitScope updatedScopes                                                             --Exit the current scope
+    finalEnv = (finalScopes, updatedFuncs)                                                            --Alias for the environment after typechecking
+
+  in case result of
+    Left err -> (env, Left err)
+    Right bodyType -> if bodyType == retType
+      then if containsReturn body 
+        then (finalEnv, Right TNone)
+        else (finalEnv, Left $ "Type error: missing return statement in " ++ name)
+      else (finalEnv, Left $ "Type error: expected return type " ++ show retType ++ " but got " ++ show bodyType)
+
+
+{-
 typecheck env@(vars, funcs) (Procedure name params body) = 
   let 
     procType = (map fst params, TNone) 
@@ -155,7 +213,7 @@ typecheck env@(vars, funcs) (Procedure name params body) =
   in case typecheck localEnv body of 
     (_, Left err) -> (env, Left err)
     _ -> ((fst env, updatedFuncs), Right TNone)
-
+-}
 typecheck env@(vars, funcs) (Call name args) = 
   case lookup name funcs of
     Nothing -> (env, Left $ "function '" ++ name ++ "' is not defined")
@@ -217,3 +275,16 @@ hasReturn env retType expr = case expr of
 isReturn :: Expr -> Bool
 isReturn (Return _) = True
 isReturn _          = False
+
+
+containsReturn :: Expr -> Bool
+containsReturn (Return _) = True  -- A direct return statement
+containsReturn (Block exprs) = any containsReturn exprs  -- Check within a block
+containsReturn (Seq exprs) = any containsReturn exprs  -- Check within a sequence
+containsReturn (IfElse _ thenBranch elseBranch) = containsReturn thenBranch && containsReturn elseBranch  -- Both branches must return
+containsReturn (While _ body) = containsReturn body  -- Ensure loop contains return
+containsReturn (DoWhile _ body) = containsReturn body  -- Ensure loop contains return
+containsReturn _ = False  -- Other expressions don’t count
+
+
+-}
