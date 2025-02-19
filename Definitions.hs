@@ -28,8 +28,8 @@ data Expr
 -}
 
 data Expr
-  = Get Identifier
-  | Lit Value
+  = Lit Value
+  | Get Identifier
   | BinOp BinOp Expr Expr
   | UnOp UnOp Expr
   | Call Identifier [Expr]
@@ -37,11 +37,11 @@ data Expr
 
 data Stmt 
   = ExprStmt Expr
-  | IfElse Expr Expr (Maybe Expr)
+  | Declare Type Identifier Expr
+  | Set Identifier Expr
+  | IfElse Expr [Stmt] (Maybe [Stmt])
   | While Expr [Stmt]
   | DoWhile Expr [Stmt]
-  | Declare Type Identifier (Maybe Expr)
-  | Set Identifier Expr
   | Return (Maybe Expr)
   | Print Expr
   | Block [Stmt]

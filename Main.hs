@@ -6,12 +6,27 @@ import Evaluator (evaluate)
 
 
 main :: IO ()
+--main = do
+  --evaluateProgram testProgram
+--  return ()
 main = do
-  evaluateProgram testProgram
-  return ()
+  let program = [
+        Declare TInt "x" (Lit (VInt 10)),
+        Block [
+          Declare TInt "y" (Lit (VInt 20)),
+          Print (Get "y") -- Expected: 20
+        ],
+        Print (Get "x"), -- Expected: 10
+        --Print (Get "y"), -- Should give a compile error (out of scope)
+        Block [
+          Declare TInt "x" (Lit (VInt 50)),
+          Print (Get "x") -- Expected: 50 (inner x)
+        ],
+        Print (Get "x") -- Expected: 10 (outer x)
+        ]
+  evaluate program
 
-
-testProgram :: Expr
+--testProgram :: Expr
 --testProgram = Seq (Set "x" (Lit (VInt 7))) (Seq (Set "y" (Lit (VString "6"))) (Set "z" (BinOp Add (Get "x") (Get "y"))))
 --testProgram = Set "x" (BinOp Add (Lit (VInt 7)) (Lit (VString "6")))
 --testProgram = Seq (Set "x" (Lit (VInt 42))) (Print (Get "x"))
@@ -133,19 +148,6 @@ testProgram =
 
 -}
 
-
-testProgram = 
-      Seq 
-        [ 
-          Declare TInt "n" (Lit (VInt 10)),
-          IfElse (BinOp Eq (Get "n") (Lit (VInt 0)))
-          (Seq 
-            [Declare TInt "x" (Lit (VInt 1))]
-          )
-          (Seq 
-            [Print (Get "x")]
-          )
-        ]
       
 {-
 
@@ -172,7 +174,7 @@ typecheckProgram program =
 
 
 --Interpreter sections
-evaluateProgram :: Expr -> IO (Value, Environment)
-evaluateProgram = evaluate ([empty], empty)
+--evaluateProgram :: Expr -> IO (Value, Environment)
+--evaluateProgram = evaluate ([empty], empty)
 
 

@@ -10,6 +10,174 @@ import qualified Data.Bifunctor
 --Expression - our program
 --(Value, Environment) - the value represents the 'value' of our expression
 --                       the environment represents the changed 'memory' following the execution of the expression
+
+
+evaluate :: [Stmt] -> IO ()
+evaluate program = do
+  evalBlock ([empty], empty) program
+  return ()
+
+
+evalExpr :: Environment -> Expr -> IO Value
+evalExpr _ (Lit value) = return value
+
+evalExpr (scopedVars, _) (Get name) =
+  case lookupVariable name scopedVars of
+    Nothing -> do
+      putStrLn $ "Compile error: variable " ++ name ++ " not defined within the current scope"
+      return VError
+    Just (_, val) -> return val
+
+evalExpr env (BinOp op expr1 expr2) = do
+  value1 <- evalExpr env expr1
+  value2 <- evalExpr env expr2
+  if value1 == VError || value2 == VError
+  then do
+    putStrLn $ "Compile error: evaluation error on operands " ++ show value1 ++ " and " ++ show value2
+    return VError
+  else do
+    let result = evalBinOps op value1 value2
+    case result of
+      Left str -> do
+          putStrLn str
+          return VError
+      Right validResult -> return validResult
+
+evalExpr env (UnOp op expr) = do
+  value <- evalExpr env expr
+  case value of
+    VError -> do
+      putStrLn $ "Compile error: evaluation error on operand " ++ show value
+      return VError
+    _ -> do
+      case evalUnOps op value of
+        Left str -> do
+          putStrLn str
+          return VError
+        Right validResult -> return validResult
+
+
+evalExpr env@(scopedVars, funcs) (Call name args) = do
+  case lookup name funcs of
+    Just (params, retType, body) ->
+      if length params /= length args
+      then do
+        putStrLn $ "Compile error: incorrect number of arguments supplied to function '" ++ name ++ "'"
+        return VError
+      else do
+        definedArgs <- evalArgs env args
+        if VError `elem` definedArgs
+        then do
+          putStrLn $ "Compile error: invalid arguments supplied to function '" ++ name ++ "'"
+          return VError
+        else do
+          let paramBindings = zipWith (\(t, n) v -> (n, (t, v))) params definedArgs
+          let newScope = fromList paramBindings
+          let env' = (newScope : scopedVars, funcs)
+          print (fst env')
+          (_, val) <- evalBlock env' body
+          --print env
+          
+          return val
+
+
+evalStmt :: Environment -> Stmt -> IO (Environment, Value)
+evalStmt env (ExprStmt expr) = do
+  result <- evalExpr env expr
+  return (env, result)
+
+evalStmt env@(scopedVars, funcs) (Declare varType name expr) = do
+  case lookup name (head scopedVars) of
+    Just _ -> do
+      putStrLn $ "Compile error: variable '" ++ name ++ "' is already assigned"
+      return (env, VError)
+    Nothing -> do
+      val <- evalExpr env expr
+      if val == VError
+      then return (env, VError)
+      else return ((insertVariable name (varType, val) scopedVars, funcs), VNone)
+
+evalStmt env@(scopedVars, funcs) (Set name expr) = do
+  case lookupVariable name scopedVars of
+    Just (existingType, _) -> do
+      val <- evalExpr env expr
+      if val == VError
+      then return (env, VError)
+      else return ((updateVariable name (existingType, val) scopedVars, funcs), VNone)
+    _ -> do
+      putStrLn $ "Compile error: variable '" ++ name ++ "' not declared"
+      return (env, VError)
+
+evalStmt env (IfElse pred trueBranch maybeFalseBranch) = do
+  predVal <- evalExpr env pred
+  case predVal of
+    VError -> return (env, VError)
+    VBool True -> do
+      evalBlock env trueBranch
+    VBool False -> case maybeFalseBranch of
+      Just falseBranch -> evalBlock env falseBranch
+      Nothing -> return (env, VNone)
+
+evalStmt env (While pred body) = do
+  predVal <- evalExpr env pred
+  case predVal of
+    VError -> return (env, VError)
+    VBool True -> do
+      (env', value) <- evalBlock env body
+      case value of
+        VError -> return (env', VError)
+        _ -> evalStmt env' (While pred body) 
+    VBool False -> return (env, VNone)
+
+evalStmt env (DoWhile pred body) = do
+  (env', result) <- evalBlock env body
+  case result of
+    VError -> return (env', VError)
+    _ -> evalStmt env' (While pred body)
+
+evalStmt env (Return maybeExpr) = do
+  case maybeExpr of
+    Nothing -> return (env, VNone)
+    Just expr -> do
+      val <- evalExpr env expr
+      return (env, val)
+  
+evalStmt env (Print expr) = do
+  val <- evalExpr env expr
+  case val of
+    VError -> return (env, VError)
+    _      -> do
+      putStrLn (prettyPrint val)
+      return (env, VNone)   
+
+evalStmt env@(scopedVars, funcs) (Block body) = do
+  let newEnv = (enterScope scopedVars, funcs)
+  (_, val) <- evalBlock newEnv body
+  return (env, val)
+
+evalStmt env@(scopedVars, funcs) (Function name params retType body) = do
+  let newFuncs = insert name (params, retType, body) funcs
+  return ((scopedVars, newFuncs), VNone)
+
+evalStmt env@(scopedVars, funcs) (Procedure name params body) = do
+  let newFuncs = insert name (params, TNone, body) funcs
+  return ((scopedVars, newFuncs), VNone)
+
+ 
+
+evalBlock :: Environment -> [Stmt] -> IO (Environment, Value)
+evalBlock env [] = return (env, VNone)
+evalBlock env (stmt : rest) = do
+  (env', val) <- evalStmt env stmt
+  case val of
+    VError -> return (env', VError)
+    VNone -> evalBlock env' rest
+    _ -> return (env', val)
+
+
+
+
+{-
 evaluate :: Environment -> Expr -> IO (Value, Environment)
 evaluate env (Lit value) = return (value, env)                                                    --Calling a literal
 
@@ -198,7 +366,7 @@ evaluate env@(_, funcs) (Call name args) =
           _     -> return (result, newEnv)
 
 
-
+-}
 
 
 --Helper for printing
@@ -248,9 +416,10 @@ evalBinOps Or  (VBool x) (VBool y)  = Right $ VBool $ x || y
 evalBinOps op  _        _        = Left $ "Type error: attempt to apply " ++ show op ++ " with incorrect types"
 
 
-evalArgs :: Environment -> [Expr] -> IO ([Value], Environment)
-evalArgs env []     = return ([], env)                                  --No arguments left to evaluate - return the evaluted arguments
-evalArgs env (expr:exprs) = do                                          
-  (val, env') <- evaluate env expr                                      --Evaluate the current argument
-  (vals, env'') <- evalArgs env' exprs                                  --Recursively evaluate the rest
-  return (val : vals, env'')                                            --Accumulate the evaluated arguments and return them
+evalArgs :: Environment -> [Expr] -> IO [Value]
+evalArgs env []     = return []                                  --No arguments left to evaluate - return the evaluted arguments
+evalArgs env (expr:exprs) = do
+  val <- evalExpr env expr                                              --Evaluate the current argument
+  vals <- evalArgs env exprs                                  --Recursively evaluate the rest
+  return (val : vals)                                            --Accumulate the evaluated arguments and return them
+
