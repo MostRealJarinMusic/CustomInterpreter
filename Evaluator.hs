@@ -8,7 +8,7 @@ import qualified Data.Bifunctor
 --Evaluation function for the interpreter - the evaluation function assumes typechecking has already taken place
 --Environment - the 'memory' assigned to our program, storing the variables and functions
 --Expression - our program
---(Value, Environment) - the value represents the 'value' of our expression
+--(Environment, Value) - the value represents the 'value' of our expression
 --                       the environment represents the changed 'memory' following the execution of the expression
 
 
@@ -73,11 +73,9 @@ evalExpr env@(scopedVars, funcs) (Call name args) = do
         else do
           let paramBindings = zipWith (\(t, n) v -> (n, (t, v))) params definedArgs
           let newScope = fromList paramBindings
-          let env' = (newScope : scopedVars, funcs)
-          print (fst env')
+          let env' = ([newScope], funcs)
+          --Functions cannot modify state
           (_, val) <- evalBlock env' body
-          --print env
-          
           return val
 
 
