@@ -1,5 +1,4 @@
-{-
-module Typechecker (typecheck) where
+module Typechecker () where
 import Prelude hiding (lookup)
 import Data.Map ( Map, insert, lookup, empty, fromList, toList, union )
 import Definitions
@@ -12,6 +11,18 @@ type FunctionTypes = Map String ([Type], Type)
 --type ScopedVariableTypes = [VariableTypes]
 type EnvironmentTypes = (ScopedVariables, FunctionTypes)
 
+
+
+typecheckExpr :: Environment -> Expr -> Either String Type
+--Literals - values to types
+typecheckExpr env (Lit (VInt    _)) = Right TInt
+typecheckExpr env (Lit (VBool   _)) = Right TBool
+typecheckExpr env (Lit (VString _)) = Right TString
+
+
+
+
+{-
 --Typechecking
 typecheck :: EnvironmentTypes -> Expr -> (EnvironmentTypes, Either String Type)
 --Literals - mapping values to types
