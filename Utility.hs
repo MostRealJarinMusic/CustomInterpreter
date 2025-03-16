@@ -24,7 +24,7 @@ updateVariable name typeVal (scope:rest) =
 --Inserts a variable into the current scope
 insertVariable :: String -> (Type, Value) -> ScopedVariables -> ScopedVariables
 insertVariable _ _ [] = error "No scope to insert variable"
-insertVariable name typeVal (scope:rest) = insert name typeVal scope : rest
+insertVariable name binding (scope:rest) = insert name binding scope : rest
 
 --Inserting multiple variables into the current scope
 insertVariables :: [(String, (Type, Value))] -> ScopedVariables -> ScopedVariables
